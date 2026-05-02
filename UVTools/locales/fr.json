@@ -84,5 +84,6 @@
   "timeoutNoDevice": "Timeout : aucun appareil détecté",
   "webSerialNotSupported": "⚠️ Web Serial API non supportée. Utilisez Chrome/Edge/Opera.",
   "loopError": "Erreur boucle lecture : {0}",
-  "baselineDeveloped": "développé par"
+  "baselineDeveloped": "développé par",
+  "tabHiddenWarning": "⚠️ AVERTISSEMENT : Onglet passé en arrière-plan — la limitation des minuteries du navigateur peut bloquer ou faire échouer l'opération. Gardez cet onglet actif !"
 }

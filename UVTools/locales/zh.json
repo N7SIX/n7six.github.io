@@ -84,5 +84,6 @@
   "timeoutNoDevice": "超时：未检测到设备",
   "webSerialNotSupported": "⚠️ 不支持 Web Serial API。请使用 Chrome/Edge/Opera 浏览器。",
   "loopError": "循环读取错误：{0}",
-  "baselineDeveloped": "开发者"
+  "baselineDeveloped": "开发者",
+  "tabHiddenWarning": "⚠️ 警告：标签页已切换到后台 — 浏览器计时器节流可能导致当前操作停滞或失败。请保持此标签页处于活动状态！"
 }

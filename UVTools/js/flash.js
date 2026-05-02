@@ -951,9 +951,58 @@ function updateProgress(percent) {
   if (bar) bar.setAttribute('aria-valuenow', String(rounded));
 }
 
-function sleep(ms) {
-  return new Promise(r => setTimeout(r, ms));
+// ========== SLEEP (unthrottled via Web Worker) ==========
+// Browsers throttle setTimeout in background tabs (minimum ~1 s).
+// Running the timer inside a Web Worker avoids that throttling so that
+// protocol timeouts remain accurate even when the user switches tabs.
+
+const _sleepWorker = (function () {
+  try {
+    return new Worker('js/sleep-worker.js');
+  } catch (e) {
+    // Workers may be unavailable due to CSP, file:// origin, or old browsers.
+    console.warn('sleep-worker unavailable, falling back to setTimeout:', e);
+    return null;
+  }
+})();
+
+// _sleepIdCounter is incremented only from the main JS thread (single-threaded),
+// so no atomic synchronization is needed.
+const _sleepResolvers = new Map();
+let _sleepIdCounter = 0;
+
+if (_sleepWorker) {
+  _sleepWorker.onmessage = function ({ data: { id } }) {
+    const resolve = _sleepResolvers.get(id);
+    if (resolve) {
+      _sleepResolvers.delete(id);
+      resolve();
+    } else {
+      console.warn('sleep-worker: received unknown id', id);
+    }
+  };
 }
+
+function sleep(ms) {
+  if (_sleepWorker) {
+    return new Promise(function (resolve) {
+      const id = _sleepIdCounter++;
+      _sleepResolvers.set(id, resolve);
+      _sleepWorker.postMessage({ id: id, ms: ms });
+    });
+  }
+  return new Promise(function (r) { setTimeout(r, ms); });
+}
+
+// ========== PAGE VISIBILITY WARNING ==========
+// When the user switches to another tab or window during an active operation,
+// warn them that timer throttling may disrupt the flashing/dump/restore.
+
+document.addEventListener('visibilitychange', function () {
+  if (document.visibilityState === 'hidden' && (isFlashing || isDumping || isRestoring)) {
+    log(t('tabHiddenWarning'), 'error');
+  }
+});
 
 // ========== CAPABILITY CHECK ==========
 if (!('serial' in navigator)) {

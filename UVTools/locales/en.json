@@ -84,5 +84,6 @@
   "timeoutNoDevice": "Timeout: no device detected",
   "webSerialNotSupported": "⚠️ Web Serial API not supported. Use Chrome/Edge/Opera.",
   "loopError": "Loop read error: {0}",
-  "baselineDeveloped": "developed by"
+  "baselineDeveloped": "developed by",
+  "tabHiddenWarning": "⚠️ WARNING: Tab switched to background — browser timer throttling may stall or fail this operation. Keep this tab active!"
 }
