@@ -951,8 +951,48 @@ function updateProgress(percent) {
   if (bar) bar.setAttribute('aria-valuenow', String(rounded));
 }
 
+// Use a Web Worker-based timer to avoid background-tab throttling of setTimeout.
+// Browsers throttle setTimeout in hidden tabs (e.g. when the user switches tabs),
+// which would pause firmware flashing mid-operation. Worker timers are not
+// subject to the same throttling policy.
+let _timerWorker = null;
+let _pendingTimers = {};
+let _timerIdCounter = 0;
+
+function getTimerWorker() {
+  if (!_timerWorker) {
+    const workerCode = `
+      self.onmessage = function(e) {
+        var id = e.data.id;
+        var ms = e.data.ms;
+        setTimeout(function() { self.postMessage(id); }, ms);
+      };
+    `;
+    const blob = new Blob([workerCode], { type: 'application/javascript' });
+    const url = URL.createObjectURL(blob);
+    _timerWorker = new Worker(url);
+    URL.revokeObjectURL(url);
+    _timerWorker.onmessage = function(e) {
+      const id = e.data;
+      if (_pendingTimers[id]) {
+        _pendingTimers[id]();
+        delete _pendingTimers[id];
+      }
+    };
+  }
+  return _timerWorker;
+}
+
 function sleep(ms) {
-  return new Promise(r => setTimeout(r, ms));
+  return new Promise(resolve => {
+    // Reset counter when safe (no pending timers) to avoid precision loss beyond 2^53
+    if (_timerIdCounter >= Number.MAX_SAFE_INTEGER && Object.keys(_pendingTimers).length === 0) {
+      _timerIdCounter = 0;
+    }
+    const id = ++_timerIdCounter;
+    _pendingTimers[id] = resolve;
+    getTimerWorker().postMessage({ id, ms });
+  });
 }
 
 // ========== CAPABILITY CHECK ==========
