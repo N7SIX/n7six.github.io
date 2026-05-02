@@ -35,6 +35,8 @@ const OBFUS_TBL = new Uint8Array([
 const CALIB_SIZE = 512; // bytes
 const CHUNK_SIZE = 16;
 let CALIB_OFFSET = 0x1E00; // Default for firmware < v5.0.0
+const SERIAL_RESPONSE_TIMEOUT_MS = 30000;
+const DEVICE_INFO_TIMEOUT_MS = 30000;
 
 // ========== STATE ==========
 let port = null;
@@ -643,7 +645,7 @@ async function waitForDeviceInfo() {
   let acc = 0;
   log(t('waiting'), 'info');
 
-  const deadline = Date.now() + 5000;
+  const deadline = Date.now() + DEVICE_INFO_TIMEOUT_MS;
   while (Date.now() < deadline) {
     const remaining = Math.max(1, deadline - Date.now());
     const msg = await waitForMessage(() => true, remaining);
@@ -657,25 +659,21 @@ async function waitForDeviceInfo() {
     log(t('interval', dt, acc), 'info');
     lastTimestamp = now;
 
-    if (dt >= 5 && dt <= 1000) {
-      acc++;
-      log(t('validMessage', acc), 'success');
-      if (acc >= 5) {
-        const uid = msg.data.slice(0, 16);
-        let blVersionEnd = -1;
-        for (let i = 16; i < 32; i++) {
-          if (msg.data[i] === 0) {
-            blVersionEnd = i;
-            break;
-          }
+    // Do not enforce strict interval bounds because background tabs can delay JS scheduling.
+    acc++;
+    log(t('validMessage', acc), 'success');
+    if (acc >= 1) {
+      const uid = msg.data.slice(0, 16);
+      let blVersionEnd = -1;
+      for (let i = 16; i < 32; i++) {
+        if (msg.data[i] === 0) {
+          blVersionEnd = i;
+          break;
         }
-        if (blVersionEnd === -1) blVersionEnd = 32;
-        const blVersion = new TextDecoder().decode(msg.data.slice(16, blVersionEnd));
-        return { uid, blVersion };
       }
-    } else {
-      if (dt < 5 || dt > 1000) log(t('invalidInterval', dt), 'error');
-      acc = 0;
+      if (blVersionEnd === -1) blVersionEnd = 32;
+      const blVersion = new TextDecoder().decode(msg.data.slice(16, blVersionEnd));
+      return { uid, blVersion };
     }
   }
   throw new Error(t('timeoutNoDevice'));
@@ -685,7 +683,7 @@ async function performHandshake(blVersion) {
   let acc = 0;
 
   while (acc < 3) {
-    const msg = await waitForMessage(m => m.msgType === MSG_NOTIFY_DEV_INFO, 3000);
+    const msg = await waitForMessage(m => m.msgType === MSG_NOTIFY_DEV_INFO, SERIAL_RESPONSE_TIMEOUT_MS);
     if (acc === 0) log(t('sendingBlVersion'), 'info');
 
     const blMsg = createMessage(MSG_NOTIFY_BL_VER, 4);
@@ -731,7 +729,7 @@ async function programFirmware() {
     await sendMessage(msg);
 
     let gotResponse = false;
-    const deadline = Date.now() + 3000;
+    const deadline = Date.now() + SERIAL_RESPONSE_TIMEOUT_MS;
     while (Date.now() < deadline && !gotResponse) {
       const remaining = Math.max(1, deadline - Date.now());
       const resp = await waitForMessage(() => true, remaining);
@@ -802,7 +800,7 @@ dumpBtn.addEventListener('click', async () => {
       await sendMessage(msg);
 
       let gotResponse = false;
-      const deadline = Date.now() + 3000;
+      const deadline = Date.now() + SERIAL_RESPONSE_TIMEOUT_MS;
       while (Date.now() < deadline && !gotResponse) {
         const remaining = Math.max(1, deadline - Date.now());
         const resp = await waitForMessage(m => m.msgType === MSG_READ_EEPROM_RESP, remaining);
@@ -884,7 +882,7 @@ restoreBtn.addEventListener('click', async () => {
       await sendMessage(msg);
 
       let gotResponse = false;
-      const deadline = Date.now() + 3000;
+      const deadline = Date.now() + SERIAL_RESPONSE_TIMEOUT_MS;
       while (Date.now() < deadline && !gotResponse) {
         const remaining = Math.max(1, deadline - Date.now());
         const resp = await waitForMessage(m => m.msgType === MSG_WRITE_EEPROM_RESP, remaining);
@@ -933,7 +931,7 @@ async function requestDeviceInfo() {
   new DataView(msg.buffer).setUint32(4, ts, true);
   await sendMessage(msg);
 
-  const deadline = Date.now() + 5000;
+  const deadline = Date.now() + DEVICE_INFO_TIMEOUT_MS;
   while (Date.now() < deadline) {
     const remaining = Math.max(1, deadline - Date.now());
     const resp = await waitForMessage(() => true, remaining);
@@ -1014,6 +1012,12 @@ function updateProgress(percent) {
 function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
+
+document.addEventListener('visibilitychange', () => {
+  if (isFlashing || isDumping || isRestoring) {
+    log(`Tab visibility changed: ${document.visibilityState}`, 'info');
+  }
+});
 
 // ========== CAPABILITY CHECK ==========
 if (!('serial' in navigator)) {
