@@ -989,7 +989,7 @@ document.addEventListener("DOMContentLoaded", () => {
     .then(r => r.json())
     .then(v => {
       const bl = document.getElementById("uvtools-baseline-version");
-      if (bl) bl.textContent = `UVTools2 v${v.version}`;
+      if (bl) bl.textContent = `UVTools v${v.version}`;
     })
     .catch(() => console.warn("Impossible to load version.json"));
 });
