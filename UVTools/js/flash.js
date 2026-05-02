@@ -1013,12 +1013,6 @@ function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
 
-document.addEventListener('visibilitychange', () => {
-  if (isFlashing || isDumping || isRestoring) {
-    log(`Tab visibility changed: ${document.visibilityState}`, 'info');
-  }
-});
-
 // ========== CAPABILITY CHECK ==========
 if (!('serial' in navigator)) {
   log(t('webSerialNotSupported'), 'error');
