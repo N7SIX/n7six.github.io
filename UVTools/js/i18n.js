@@ -7,6 +7,7 @@
 (function () {
   const DEFAULT_LANG = localStorage.getItem('uv-k5-flasher-lang') || 'en';
   const supported = ['en', 'fr', 'zh']; // add other codes (it, es, de) when files exist
+  const LOCALE_VERSION = '20260502c';
 
   // Load a locale JSON file, throws on file:// or fetch errors
   async function loadLocale(lang) {
@@ -17,7 +18,7 @@
       );
     }
 
-    const res = await fetch(`./locales/${lang}.json`, { cache: 'no-store' });
+    const res = await fetch(`./locales/${lang}.json?v=${LOCALE_VERSION}`, { cache: 'no-store' });
     if (!res.ok) throw new Error(`Failed to load locale: ${lang}`);
     return res.json();
   }

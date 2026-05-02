@@ -1,5 +1,5 @@
 {
-  "title": "UV-K5 V3 & UV-K1 Web 工具",
+  "title": "UV-K1 系列 & UV-K5 V3 Web 工具",
   "subtitle": "通过 Web Serial API 进行固件写入和校准管理",
   "tabFlash": "写入固件",
   "tabDump": "导出校准数据",

@@ -1,5 +1,5 @@
 {
-  "title": "UV-K5 V3 & UV-K1 Outil Web",
+  "title": "Série UV-K1 & UV-K5 V3 Outil Web",
   "subtitle": "Flasher de firmware et gestionnaire de calibration via Web Serial API",
   "tabFlash": "Flasher Firmware",
   "tabDump": "Dumper Calib",
