@@ -951,8 +951,33 @@ function updateProgress(percent) {
   if (bar) bar.setAttribute('aria-valuenow', String(rounded));
 }
 
+// Use a Web Worker for sleep so that timer callbacks are not throttled
+// by the browser when the tab is in the background (e.g. user switches tabs
+// or opens a file-explorer window while flashing is in progress).
+const _sleepWorkerBlob = new Blob(
+  ['self.onmessage=function(e){var d=e.data;setTimeout(function(){self.postMessage({id:d.id});},d.ms);};'],
+  { type: 'application/javascript' }
+);
+const _sleepWorkerUrl = URL.createObjectURL(_sleepWorkerBlob);
+const _sleepWorker = new Worker(_sleepWorkerUrl);
+URL.revokeObjectURL(_sleepWorkerUrl); // Worker holds its own reference; URL is no longer needed
+const _sleepCallbacks = new Map();
+let _sleepIdCounter = 0;
+_sleepWorker.onmessage = function (e) {
+  const cb = _sleepCallbacks.get(e.data.id);
+  if (cb) {
+    _sleepCallbacks.delete(e.data.id);
+    cb();
+  }
+};
+
 function sleep(ms) {
-  return new Promise(r => setTimeout(r, ms));
+  return new Promise(resolve => {
+    const id = _sleepIdCounter;
+    _sleepIdCounter = (_sleepIdCounter + 1) & 0x7fffffff; // wrap at 2^31-1 to stay in safe integer range
+    _sleepCallbacks.set(id, resolve);
+    _sleepWorker.postMessage({ id, ms });
+  });
 }
 
 // ========== CAPABILITY CHECK ==========
