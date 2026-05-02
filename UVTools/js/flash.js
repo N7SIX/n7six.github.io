@@ -47,6 +47,8 @@ let isDumping = false;
 let isRestoring = false;
 let readBuffer = [];
 let isReading = false;
+let parsedMessageQueue = [];
+let messageWaiters = [];
 
 // ========== UI ELEMENTS ==========
 const flashBtn = document.getElementById('flashBtn');
@@ -356,6 +358,7 @@ async function connect() {
 }
 
 async function disconnect() {
+  failPendingMessageWaiters(new Error('Serial disconnected'));
   isReading = false;
   if (reader) {
     try { await reader.cancel(); } catch {}
@@ -392,6 +395,7 @@ async function readLoop() {
       }
       if (value?.length) {
         readBuffer.push(...value);
+        processReadBuffer();
         log(t('rxData', value.length, readBuffer.length), 'info');
       }
     }
@@ -472,6 +476,71 @@ function fetchMessage(buf) {
   return { msgType, data, rawData: msgBuf };
 }
 
+function processReadBuffer() {
+  while (true) {
+    const msg = fetchMessage(readBuffer);
+    if (!msg) break;
+    enqueueParsedMessage(msg);
+  }
+}
+
+function enqueueParsedMessage(msg) {
+  for (let i = 0; i < messageWaiters.length; i++) {
+    const waiter = messageWaiters[i];
+    if (waiter.predicate(msg)) {
+      messageWaiters.splice(i, 1);
+      if (waiter.timeoutId) clearTimeout(waiter.timeoutId);
+      waiter.resolve(msg);
+      return;
+    }
+  }
+  parsedMessageQueue.push(msg);
+}
+
+function waitForMessage(predicate = () => true, timeoutMs = 3000) {
+  for (let i = 0; i < parsedMessageQueue.length; i++) {
+    const msg = parsedMessageQueue[i];
+    if (predicate(msg)) {
+      parsedMessageQueue.splice(i, 1);
+      return Promise.resolve(msg);
+    }
+  }
+
+  return new Promise((resolve, reject) => {
+    const waiter = {
+      predicate,
+      resolve,
+      reject,
+      timeoutId: null
+    };
+
+    if (timeoutMs > 0) {
+      waiter.timeoutId = setTimeout(() => {
+        const idx = messageWaiters.indexOf(waiter);
+        if (idx >= 0) messageWaiters.splice(idx, 1);
+        reject(new Error('Timed out waiting for serial response'));
+      }, timeoutMs);
+    }
+
+    messageWaiters.push(waiter);
+  });
+}
+
+function failPendingMessageWaiters(error) {
+  if (messageWaiters.length === 0) return;
+  for (const waiter of messageWaiters) {
+    if (waiter.timeoutId) clearTimeout(waiter.timeoutId);
+    waiter.reject(error);
+  }
+  messageWaiters = [];
+}
+
+function resetMessageState() {
+  readBuffer = [];
+  parsedMessageQueue = [];
+  failPendingMessageWaiters(new Error('Message state reset'));
+}
+
 function obfuscate(buf, off, size) {
   for (let i = 0; i < size; i++) buf[off + i] ^= OBFUS_TBL[i % OBFUS_TBL.length];
 }
@@ -515,9 +584,10 @@ async function flashFirmware() {
   if (progressContainer) progressContainer.style.display = 'block';
   updateProgress(0);
 
-  readBuffer = [];
+  resetMessageState();
   log(t('bufferEmpty'), 'info');
   await sleep(1000);
+  processReadBuffer();
   log(t('bufferContains', readBuffer.length), 'info');
 
   try {
@@ -569,44 +639,43 @@ async function flashFirmware() {
 }
 
 async function waitForDeviceInfo() {
-  let lastTimestamp = 0, acc = 0, timeout = 0;
+  let lastTimestamp = 0;
+  let acc = 0;
   log(t('waiting'), 'info');
 
-  while (timeout < 500) {
-    await sleep(10);
-    timeout++;
-
-    const msg = fetchMessage(readBuffer);
-    if (!msg) continue;
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline) {
+    const remaining = Math.max(1, deadline - Date.now());
+    const msg = await waitForMessage(() => true, remaining);
 
     log(t('messageReceived', msg.msgType.toString(16).padStart(4, '0')), 'info');
 
-    if (msg.msgType === MSG_NOTIFY_DEV_INFO) {
-      const now = Date.now();
-      const dt = now - lastTimestamp;
-      log(t('interval', dt, acc), 'info');
-      lastTimestamp = now;
+    if (msg.msgType !== MSG_NOTIFY_DEV_INFO) continue;
 
-      if (lastTimestamp > 0 && dt >= 5 && dt <= 1000) {
-        acc++;
-        log(t('validMessage', acc), 'success');
-        if (acc >= 5) {
-          const uid = msg.data.slice(0, 16);
-          let blVersionEnd = -1;
-          for (let i = 16; i < 32; i++) {
-            if (msg.data[i] === 0) {
-              blVersionEnd = i;
-              break;
-            }
+    const now = Date.now();
+    const dt = now - lastTimestamp;
+    log(t('interval', dt, acc), 'info');
+    lastTimestamp = now;
+
+    if (dt >= 5 && dt <= 1000) {
+      acc++;
+      log(t('validMessage', acc), 'success');
+      if (acc >= 5) {
+        const uid = msg.data.slice(0, 16);
+        let blVersionEnd = -1;
+        for (let i = 16; i < 32; i++) {
+          if (msg.data[i] === 0) {
+            blVersionEnd = i;
+            break;
           }
-          if (blVersionEnd === -1) blVersionEnd = 32;
-          const blVersion = new TextDecoder().decode(msg.data.slice(16, blVersionEnd));
-          return { uid, blVersion };
         }
-      } else {
-        if (dt < 5 || dt > 1000) log(t('invalidInterval', dt), 'error');
-        acc = 0;
+        if (blVersionEnd === -1) blVersionEnd = 32;
+        const blVersion = new TextDecoder().decode(msg.data.slice(16, blVersionEnd));
+        return { uid, blVersion };
       }
+    } else {
+      if (dt < 5 || dt > 1000) log(t('invalidInterval', dt), 'error');
+      acc = 0;
     }
   }
   throw new Error(t('timeoutNoDevice'));
@@ -616,30 +685,26 @@ async function performHandshake(blVersion) {
   let acc = 0;
 
   while (acc < 3) {
-    await sleep(50);
-    const msg = fetchMessage(readBuffer);
-    if (msg && msg.msgType === MSG_NOTIFY_DEV_INFO) {
-      if (acc === 0) log(t('sendingBlVersion'), 'info');
+    const msg = await waitForMessage(m => m.msgType === MSG_NOTIFY_DEV_INFO, 3000);
+    if (acc === 0) log(t('sendingBlVersion'), 'info');
 
-      const blMsg = createMessage(MSG_NOTIFY_BL_VER, 4);
-      const blBytes = new TextEncoder().encode(blVersion.substring(0, 4));
-      for (let i = 0; i < Math.min(blBytes.length, 4); i++) blMsg[4 + i] = blBytes[i];
-      await sendMessage(blMsg);
-      acc++;
-      await sleep(50);
-    }
+    const blMsg = createMessage(MSG_NOTIFY_BL_VER, 4);
+    const blBytes = new TextEncoder().encode(blVersion.substring(0, 4));
+    for (let i = 0; i < Math.min(blBytes.length, 4); i++) blMsg[4 + i] = blBytes[i];
+    await sendMessage(blMsg);
+    acc++;
   }
 
   log(t('waitingStop'), 'info');
   await sleep(200);
 
-  while (readBuffer.length > 0) {
-    const msg = fetchMessage(readBuffer);
-    if (!msg) break;
+  processReadBuffer();
+  while (parsedMessageQueue.length > 0) {
+    const msg = parsedMessageQueue.shift();
     if (msg.msgType === MSG_NOTIFY_DEV_INFO) log(t('devInfoIgnored'), 'info');
     else log(t('messageReceived', msg.msgType.toString(16)), 'info');
   }
-  log(t('bufferCleaned', readBuffer.length), 'info');
+  log(t('bufferCleaned', 0), 'info');
 }
 
 async function programFirmware() {
@@ -666,33 +731,32 @@ async function programFirmware() {
     await sendMessage(msg);
 
     let gotResponse = false;
-    for (let i = 0; i < 300 && !gotResponse; i++) {
-      await sleep(10);
-      const resp = fetchMessage(readBuffer);
-      if (!resp) continue;
+    const deadline = Date.now() + 3000;
+    while (Date.now() < deadline && !gotResponse) {
+      const remaining = Math.max(1, deadline - Date.now());
+      const resp = await waitForMessage(() => true, remaining);
       if (resp.msgType === MSG_NOTIFY_DEV_INFO) continue;
+      if (resp.msgType !== MSG_PROG_FW_RESP) continue;
 
-      if (resp.msgType === MSG_PROG_FW_RESP) {
-        const dv = new DataView(resp.data.buffer);
-        const respPageIndex = dv.getUint16(4, true);
-        const err = dv.getUint16(6, true);
+      const dv = new DataView(resp.data.buffer);
+      const respPageIndex = dv.getUint16(4, true);
+      const err = dv.getUint16(6, true);
 
-        if (respPageIndex !== pageIndex) {
-          log(t('pageWrongResponse', pageIndex + 1, pageCount, respPageIndex), 'error');
-          continue;
-        }
-        if (err !== 0) {
-          log(t('pageError', pageIndex + 1, pageCount, err), 'error');
-          retryCount++;
-          if (retryCount > MAX_RETRIES) throw new Error(t('tooManyErrors', pageIndex));
-          break;
-        }
-
-        gotResponse = true;
-        retryCount = 0;
-        if ((pageIndex + 1) % 10 === 0 || pageIndex === pageCount - 1)
-          log(t('pageOk', pageIndex + 1, pageCount), 'success');
+      if (respPageIndex !== pageIndex) {
+        log(t('pageWrongResponse', pageIndex + 1, pageCount, respPageIndex), 'error');
+        continue;
       }
+      if (err !== 0) {
+        log(t('pageError', pageIndex + 1, pageCount, err), 'error');
+        retryCount++;
+        if (retryCount > MAX_RETRIES) throw new Error(t('tooManyErrors', pageIndex));
+        break;
+      }
+
+      gotResponse = true;
+      retryCount = 0;
+      if ((pageIndex + 1) % 10 === 0 || pageIndex === pageCount - 1)
+        log(t('pageOk', pageIndex + 1, pageCount), 'success');
     }
 
     if (gotResponse) {
@@ -716,8 +780,9 @@ dumpBtn.addEventListener('click', async () => {
 
   try {
     if (!port) await connect();
-    readBuffer = [];
+    resetMessageState();
     await sleep(1000);
+    processReadBuffer();
 
     const devInfo = await requestDeviceInfo();
     log(t('dumpingData'), 'info');
@@ -737,23 +802,20 @@ dumpBtn.addEventListener('click', async () => {
       await sendMessage(msg);
 
       let gotResponse = false;
-      for (let attempt = 0; attempt < 300 && !gotResponse; attempt++) {
-        await sleep(10);
-        const resp = fetchMessage(readBuffer);
-        if (!resp) continue;
+      const deadline = Date.now() + 3000;
+      while (Date.now() < deadline && !gotResponse) {
+        const remaining = Math.max(1, deadline - Date.now());
+        const resp = await waitForMessage(m => m.msgType === MSG_READ_EEPROM_RESP, remaining);
+        const dv = new DataView(resp.data.buffer);
+        const respOffset = dv.getUint16(0, true);
+        const respSize = resp.data[2];
 
-        if (resp.msgType === MSG_READ_EEPROM_RESP) {
-          const dv = new DataView(resp.data.buffer);
-          const respOffset = dv.getUint16(0, true);
-          const respSize = resp.data[2];
-
-          if (respOffset === offset && respSize === CHUNK_SIZE) {
-            for (let j = 0; j < CHUNK_SIZE; j++) {
-              dumpedData[i + j] = resp.data[4 + j];
-            }
-            gotResponse = true;
-            offset += CHUNK_SIZE;
+        if (respOffset === offset && respSize === CHUNK_SIZE) {
+          for (let j = 0; j < CHUNK_SIZE; j++) {
+            dumpedData[i + j] = resp.data[4 + j];
           }
+          gotResponse = true;
+          offset += CHUNK_SIZE;
         }
       }
 
@@ -795,8 +857,9 @@ restoreBtn.addEventListener('click', async () => {
 
   try {
     if (!port) await connect();
-    readBuffer = [];
+    resetMessageState();
     await sleep(1000);
+    processReadBuffer();
 
     const devInfo = await requestDeviceInfo();
     log(t('restoringData'), 'info');
@@ -821,19 +884,16 @@ restoreBtn.addEventListener('click', async () => {
       await sendMessage(msg);
 
       let gotResponse = false;
-      for (let attempt = 0; attempt < 300 && !gotResponse; attempt++) {
-        await sleep(10);
-        const resp = fetchMessage(readBuffer);
-        if (!resp) continue;
+      const deadline = Date.now() + 3000;
+      while (Date.now() < deadline && !gotResponse) {
+        const remaining = Math.max(1, deadline - Date.now());
+        const resp = await waitForMessage(m => m.msgType === MSG_WRITE_EEPROM_RESP, remaining);
+        const dv = new DataView(resp.data.buffer);
+        const respOffset = dv.getUint16(0, true);
 
-        if (resp.msgType === MSG_WRITE_EEPROM_RESP) {
-          const dv = new DataView(resp.data.buffer);
-          const respOffset = dv.getUint16(0, true);
-
-          if (respOffset === offset) {
-            gotResponse = true;
-            offset += CHUNK_SIZE;
-          }
+        if (respOffset === offset) {
+          gotResponse = true;
+          offset += CHUNK_SIZE;
         }
       }
 
@@ -872,20 +932,20 @@ async function requestDeviceInfo() {
   const msg = createMessage(MSG_DEV_INFO_REQ, 4);
   new DataView(msg.buffer).setUint32(4, ts, true);
   await sendMessage(msg);
-  
-  for (let timeout = 0; timeout < 500; timeout++) {
-    await sleep(10);
-    const resp = fetchMessage(readBuffer);
-    if (!resp) continue;
-    
+
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline) {
+    const remaining = Math.max(1, deadline - Date.now());
+    const resp = await waitForMessage(() => true, remaining);
+
     log(t('messageReceived', resp.msgType.toString(16).padStart(4, '0')), 'info');
-    
-    if (resp.msgType === MSG_DEV_INFO_RESP) {
-      // Log raw device info data
-      logDeviceInfo(resp.data);
-      log(t('deviceDetected'), 'success');
-      return { timestamp: ts };
-    }
+
+    if (resp.msgType !== MSG_DEV_INFO_RESP) continue;
+
+    // Log raw device info data
+    logDeviceInfo(resp.data);
+    log(t('deviceDetected'), 'success');
+    return { timestamp: ts };
   }
   throw new Error(t('timeoutNoDevice'));
 }
