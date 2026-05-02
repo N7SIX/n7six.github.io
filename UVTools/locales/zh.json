@@ -1,0 +1,15 @@
+{
+  "title": "UV-K5 V3 和 UV-K1 网页工具",
+  "subtitle": "通过 Web Serial API 进行固件刷写和校准管理",
+  "flash_firmware": "刷写固件",
+  "dump_calib": "导出校准",
+  "restore_calib": "恢复校准",
+  "firmware_file": "固件文件 (.bin)",
+  "no_file_selected": "未选择文件",
+  "choose_file": "选择文件",
+  "flash_firmware_btn": "刷写固件",
+  "dump_description": "从您的 UV-K5 V3 或 UV-K1 设备提取校准数据。",
+  "dump_btn": "导出校准数据",
+  "download_text": "下载 calibration.dat",
+  "calib_file": "校准转储文件 (.dat)"
+}

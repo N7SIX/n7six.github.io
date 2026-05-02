@@ -1,0 +1,40 @@
+/* === UV-K5 Web Tool – Apple Green Theme === */
+/* Design by ChatGPT 🍏 – fresh, clean and accessible */
+
+/* ---------- Reset & base ---------- */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* ---------- Color system ---------- */
+:root {
+  --primary-1: #7ED957; /* Apple green */
+  --primary-2: #34C759; /* iOS green */
+  --bg-grad: linear-gradient(135deg, #E9FBE6 0%, #CFF6C6 50%, #B9F2B2 100%);
+  --text: #19361f;
+  --muted: #45634d;
+  --border: #d6ead3;
+  --card: #ffffff;
+}
+
+/* ---------- Layout ---------- */
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+  background: var(--bg-grad);
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+}
+
+.container {
+  background: color-mix(in oklab, var(--card), #f0fff3 15%);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  max-width: 720px;
+  width: 100%;

@@ -1,0 +1,15 @@
+{
+  "title": "Outil Web UV-K5 V3 & UV-K1",
+  "subtitle": "Flasheur de firmware et gestionnaire de calibration via Web Serial API",
+  "flash_firmware": "Flasher le firmware",
+  "dump_calib": "Extraire Calib",
+  "restore_calib": "Restaurer Calib",
+  "firmware_file": "Fichier firmware (.bin)",
+  "no_file_selected": "Aucun fichier sélectionné",
+  "choose_file": "Choisir un fichier",
+  "flash_firmware_btn": "Flasher le firmware",
+  "dump_description": "Extraire les données de calibration de votre appareil UV-K5 V3 ou UV-K1.",
+  "dump_btn": "Extraire les données de calibration",
+  "download_text": "Télécharger calibration.dat",
+  "calib_file": "Fichier de calibration (.dat)"
+}
