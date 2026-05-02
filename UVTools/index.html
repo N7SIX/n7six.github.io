@@ -77,9 +77,38 @@
           </div>
         </div>
       </section>
+
+      <button id="restoreBtn" disabled aria-live="polite">Restore Calibration Data</button>
     </div>
+
+    <!-- PROGRESS BAR -->
+    <section class="progress-container" id="progressContainer" aria-live="polite">
+      <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div class="progress-fill" id="progressFill"></div>
+        <div class="progress-label" id="progressLabel">0%</div>
+      </div>
+    </section>
+
+    <!-- CONSOLE LOG -->
+    <section class="log-container" aria-labelledby="logTitle">
+      <div class="log-header">
+        <button class="log-toggle" id="logToggle" type="button" aria-expanded="false">Show Console</button>
+      </div>
+      <div class="log" id="log" aria-live="polite"></div>
+    </section>
+
+    <aside class="info-box" id="infoBox">
+      <strong>Note:</strong> This application requires Chrome/Edge/Opera.
+    </aside>
+
+    <footer class="baseline">
+    <span id="uvtools-baseline-version">UVTools2</span>
+    – <span id="baseline-developed"></span> Armel, F4HWN
+    </footer>
+
   </main>
+
   <script src="js/i18n.js"></script>
-  <script src="js/flash.js"></script>
+  <script src="js/flash.js" type="module"></script>
 </body>
 </html>

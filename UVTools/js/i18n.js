@@ -38,3 +38,40 @@
       const sel = document.getElementById('languageSelect');
       if (!sel) return;
       sel.addEventListener('change', async (e) => {
+        const lang = e.target.value;
+        try {
+          await this.setLanguage(lang);
+          localStorage.setItem('uv-k5-flasher-lang', this.lang);
+          // Let the app refresh texts
+          if (window.updateUI) window.updateUI();
+        } catch (err) {
+          console.error('Failed to switch language:', err);
+          const el = document.getElementById('infoBox');
+          if (el) el.innerHTML = `<strong>Error loading language:</strong> ${err.message}`;
+        }
+      });
+    },
+    // Translate helper with simple {0} substitution
+    t(key, ...args) {
+      const base = this.dict && this.dict[key] ? this.dict[key] : key;
+      return args.reduce((acc, val, idx) => acc.replace(`{${idx}}`, val), base);
+    },
+    async setLanguage(lang) {
+      this.lang = supported.includes(lang) ? lang : 'en';
+      this.dict = await loadLocale(this.lang);
+      document.documentElement.lang = this.lang;
+    }
+  };
+
+  // Expose globally
+  window.i18n = i18n;
+
+  // Expose a promise others can await before touching translations
+  window.i18nReady = i18n.init().catch((err) => {
+    console.error('i18n init error:', err);
+    const el = document.getElementById('infoBox');
+    if (el) el.innerHTML = `<strong>Error:</strong> ${err.message}`;
+    // resolve anyway to avoid blocking app; UI will display keys if needed
+    return Promise.resolve();
+  });
+})();
