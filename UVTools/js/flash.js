@@ -951,9 +951,42 @@ function updateProgress(percent) {
   if (bar) bar.setAttribute('aria-valuenow', String(rounded));
 }
 
-function sleep(ms) {
-  return new Promise(r => setTimeout(r, ms));
+// ========== BACKGROUND-SAFE SLEEP (Web Worker timer) ==========
+// Browsers throttle setTimeout in background tabs (to ≥1s), which breaks
+// the flashing protocol. Using a Web Worker avoids that throttling.
+let _timerWorker = null;
+const _timerCallbacks = new Map();
+let _timerNextId = 0;
+
+function getTimerWorker() {
+  if (!_timerWorker) {
+    _timerWorker = new Worker(new URL('./sleep-worker.js', import.meta.url));
+    _timerWorker.onmessage = (e) => {
+      const cb = _timerCallbacks.get(e.data.id);
+      if (cb) {
+        _timerCallbacks.delete(e.data.id);
+        cb();
+      }
+    };
+  }
+  return _timerWorker;
 }
+
+function sleep(ms) {
+  return new Promise(r => {
+    const id = _timerNextId;
+    _timerNextId = (_timerNextId + 1) & 0x7fffffff;
+    _timerCallbacks.set(id, r);
+    getTimerWorker().postMessage({ id, ms });
+  });
+}
+
+// ========== BACKGROUND TAB WARNING ==========
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && (isFlashing || isDumping || isRestoring)) {
+    log(t('backgroundTabWarning'), 'warn');
+  }
+});
 
 // ========== CAPABILITY CHECK ==========
 if (!('serial' in navigator)) {
