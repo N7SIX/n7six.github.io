@@ -242,6 +242,21 @@ function setFirmwareBuffer(buf, name = 'firmware.bin') {
   updateFlashButton();
 }
 
+function clearFirmwareSelection() {
+  firmwareData = null;
+
+  if (firmwareFileInput) firmwareFileInput.value = '';
+
+  if (fileName) {
+    fileName.textContent = t('fileNoFile');
+    fileName.classList.remove('has-file');
+  }
+
+  if (fileLabel) fileLabel.classList.remove('has-file');
+
+  updateFlashButton();
+}
+
 // ---------- Auto-load firmware from URL ----------
 
 async function loadFirmwareFromURL(url) {
@@ -629,6 +644,7 @@ async function flashFirmware() {
 
     updateProgress(100);
     log(t('programmingComplete'), 'success');
+    clearFirmwareSelection();
 
     setTimeout(() => {
       if (progressContainer) progressContainer.style.display = 'none';
