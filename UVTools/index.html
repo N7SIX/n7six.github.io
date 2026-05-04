@@ -67,13 +67,17 @@
     <div class="tab-content" id="dump-content" role="tabpanel">
       <section class="section">
         <p class="tab-description" id="dumpDescription">
-          Extract calibration data from your UV-K5 V3 or UV-K1 device.
+          Extract calibration data from your radio. The connected radio is auto-detected.
         </p>
         <button id="dumpBtn">Dump Calibration Data</button>
+        <button id="dumpFullBtn" style="margin-top:10px;">Dump Full EEPROM</button>
       </section>
 
       <div class="download-link" id="dumpDownload">
         <a href="#" id="dumpLink" download="calibration.dat">💾 <span id="downloadText">Download calibration.dat</span></a>
+      </div>
+      <div class="download-link" id="dumpFullDownload" style="display:none;">
+        <a href="#" id="dumpFullLink" download="eeprom_full.bin">💾 <span id="downloadFullText">Download eeprom_full.bin</span></a>
       </div>
     </div>
 

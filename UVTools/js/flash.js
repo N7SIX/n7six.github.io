@@ -267,6 +267,10 @@ window.updateUI = function updateUI() {
   const downloadText = document.getElementById('downloadText');
   if (dumpDesc) dumpDesc.textContent = t('dumpDescription');
   if (downloadText) downloadText.textContent = t('downloadText');
+  if (dumpBtn) dumpBtn.textContent = t('dumpBtn');
+  if (dumpFullBtn) dumpFullBtn.textContent = t('dumpFullBtn');
+  const downloadFullTextEl = document.getElementById('downloadFullText');
+  if (downloadFullTextEl) downloadFullTextEl.textContent = t('downloadFullText');
 
   // Log toggle
   if (logToggle) {
@@ -1158,11 +1162,56 @@ async function programFirmware() {
   }
 }
 
+// ========== EEPROM READ HELPER ==========
+const EEPROM_FULL_SIZE = 0x10000; // 64 KB
+
+async function readEepromRegion(devInfo, startOffset, size, onProgress) {
+  const data = new Uint8Array(size);
+  let offset = startOffset;
+
+  for (let i = 0; i < size; i += CHUNK_SIZE) {
+    if (onProgress) onProgress(Math.round((i / size) * 100));
+
+    const msg = createMessage(MSG_READ_EEPROM, 8);
+    const view = new DataView(msg.buffer);
+    view.setUint16(4, offset, true);
+    view.setUint16(6, CHUNK_SIZE, true);
+    view.setUint32(8, devInfo.timestamp, true);
+    await sendMessage(msg);
+
+    let gotResponse = false;
+    const deadline = Date.now() + SERIAL_RESPONSE_TIMEOUT_MS;
+    while (Date.now() < deadline && !gotResponse) {
+      const remaining = Math.max(1, deadline - Date.now());
+      const resp = await waitForMessage(m => m.msgType === MSG_READ_EEPROM_RESP, remaining);
+      const dv = new DataView(resp.data.buffer);
+      const respOffset = dv.getUint16(0, true);
+      const respSize = resp.data[2];
+
+      if (respOffset === offset && respSize === CHUNK_SIZE) {
+        for (let j = 0; j < CHUNK_SIZE; j++) data[i + j] = resp.data[4 + j];
+        gotResponse = true;
+        offset += CHUNK_SIZE;
+      }
+    }
+
+    if (!gotResponse) throw new Error(t('eepromError', offset.toString(16)));
+  }
+
+  return data;
+}
+
 // ========== DUMP CALIBRATION ==========
+const dumpFullBtn = document.getElementById('dumpFullBtn');
+const dumpFullDownload = document.getElementById('dumpFullDownload');
+const dumpFullLink = document.getElementById('dumpFullLink');
+const downloadFullText = document.getElementById('downloadFullText');
+
 dumpBtn.addEventListener('click', async () => {
   if (isDumping) return;
   isDumping = true;
   dumpBtn.disabled = true;
+  if (dumpFullBtn) dumpFullBtn.disabled = true;
   progressContainer.style.display = 'block';
   updateProgress(0);
   dumpDownload.style.display = 'none';
@@ -1173,45 +1222,11 @@ dumpBtn.addEventListener('click', async () => {
     await sleep(1000);
     processReadBuffer();
 
+
     const devInfo = await requestDeviceInfo();
     log(t('dumpingData'), 'info');
 
-    const dumpedData = new Uint8Array(CALIB_SIZE);
-    let offset = CALIB_OFFSET;
-
-    for (let i = 0; i < CALIB_SIZE; i += CHUNK_SIZE) {
-      const pct = Math.round((i / CALIB_SIZE) * 100);
-      updateProgress(pct);
-
-      const msg = createMessage(MSG_READ_EEPROM, 8);
-      const view = new DataView(msg.buffer);
-      view.setUint16(4, offset, true);
-      view.setUint16(6, CHUNK_SIZE, true);
-      view.setUint32(8, devInfo.timestamp, true);
-      await sendMessage(msg);
-
-      let gotResponse = false;
-      const deadline = Date.now() + SERIAL_RESPONSE_TIMEOUT_MS;
-      while (Date.now() < deadline && !gotResponse) {
-        const remaining = Math.max(1, deadline - Date.now());
-        const resp = await waitForMessage(m => m.msgType === MSG_READ_EEPROM_RESP, remaining);
-        const dv = new DataView(resp.data.buffer);
-        const respOffset = dv.getUint16(0, true);
-        const respSize = resp.data[2];
-
-        if (respOffset === offset && respSize === CHUNK_SIZE) {
-          for (let j = 0; j < CHUNK_SIZE; j++) {
-            dumpedData[i + j] = resp.data[4 + j];
-          }
-          gotResponse = true;
-          offset += CHUNK_SIZE;
-        }
-      }
-
-      if (!gotResponse) {
-        throw new Error(t('eepromError', offset.toString(16)));
-      }
-    }
+    const dumpedData = await readEepromRegion(devInfo, CALIB_OFFSET, CALIB_SIZE, pct => updateProgress(pct));
 
     updateProgress(100);
     log(t('dumpComplete'), 'success');
@@ -1232,9 +1247,57 @@ dumpBtn.addEventListener('click', async () => {
   } finally {
     isDumping = false;
     dumpBtn.disabled = false;
+    if (dumpFullBtn) dumpFullBtn.disabled = false;
     if (port) await disconnect();
   }
 });
+
+// ========== DUMP FULL EEPROM ==========
+if (dumpFullBtn) {
+  dumpFullBtn.addEventListener('click', async () => {
+    if (isDumping) return;
+    isDumping = true;
+    dumpBtn.disabled = true;
+    dumpFullBtn.disabled = true;
+    progressContainer.style.display = 'block';
+    updateProgress(0);
+    if (dumpFullDownload) dumpFullDownload.style.display = 'none';
+
+    try {
+      if (!port) await connect();
+      resetMessageState();
+      await sleep(1000);
+      processReadBuffer();
+
+      const devInfo = await requestDeviceInfo();
+      log(t('dumpFullStarted'), 'info');
+
+      const fullData = await readEepromRegion(devInfo, 0, EEPROM_FULL_SIZE, pct => updateProgress(pct));
+
+      updateProgress(100);
+      log(t('dumpFullComplete'), 'success');
+
+      const blob = new Blob([fullData], { type: 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      dumpFullLink.href = url;
+      dumpFullLink.download = 'eeprom_full.bin';
+      dumpFullDownload.style.display = 'block';
+      log(t('dumpFullSaved'), 'success');
+
+      setTimeout(() => {
+        if (progressContainer) progressContainer.style.display = 'none';
+        updateProgress(0);
+      }, 800);
+    } catch (e) {
+      log(t('error', e?.message ?? String(e)), 'error');
+    } finally {
+      isDumping = false;
+      dumpBtn.disabled = false;
+      dumpFullBtn.disabled = false;
+      if (port) await disconnect();
+    }
+  });
+}
 
 // ========== RESTORE CALIBRATION ==========
 restoreBtn.addEventListener('click', async () => {
