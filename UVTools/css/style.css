@@ -60,10 +60,11 @@ h1 {
   padding: 8px 12px;
   border: 2px solid var(--border);
   border-radius: 8px;
-  background: white;
+  background: var(--card);
+  color: var(--text);
   cursor: pointer;
   font-size: 14px;
-  transition: border-color 0.3s;
+  transition: border-color 0.3s, background 0.3s, color 0.3s;
 }
 
 .language-selector select:hover {
@@ -160,6 +161,7 @@ select {
   font-size: 14px;
   background: var(--card);
   color: var(--text);
+  color-scheme: light;
   transition: border-color 0.3s, background 0.3s, color 0.3s;
 }
 
@@ -453,6 +455,13 @@ button:disabled {
     --muted: #a7c9b1;
     --border: #22442a;
     --card: #0f1b12;
+  }
+
+  select {
+    color-scheme: dark;
+    background: #1a2e1e;
+    color: #e7f6eb;
+    border-color: #22442a;
   }
 
   .container {
