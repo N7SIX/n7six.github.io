@@ -3,9 +3,175 @@ const customFileInputDiv = document.getElementById('customFileInputDiv');
 const customFileInput = document.getElementById('customFileInput');
 const customFileLabel = document.getElementById('customFileLabel');
 const flashButton = document.getElementById('flashButton');
+const radioProfileSelect = document.getElementById('radioProfile');
+const profileHelp = document.getElementById('profileHelp');
+const engineBadge = document.getElementById('engineBadge');
+const flashButtonText = document.querySelector('#flashButton .text');
+const radioProfileLabel = document.querySelector('label[for="radioProfile"]');
 
 let rawVersion = null; // stores the raw version data for fwpack.js and qsflash.js
 let rawFirmware = null; // stores the raw firmware data for qsflash.js
+
+const PROFILE_DEFAULT = 'k1k5-v3';
+const MODERN_FLASHER_PATH = '../UVTools/index.html';
+const LEGACY_I18N = {
+    en: {
+        radioFamilyLabel: 'Radio Family',
+        profileK5K6V1: 'UV-K5/K6 Version 1',
+        profileK5K6V2: 'UV-K5/K6 Version 2',
+        profileK1K5V3: 'UV-K1 Series/K5 Version 3',
+        profileHelpV1: 'Use this page for UV-K5/K6 Version 1 firmware.',
+        profileHelpV2: 'Use this page for UV-K5/K6 Version 2 firmware.',
+        profileHelpV3: 'This profile uses the modern UVTools flasher page. Click flash to continue.',
+        badgeLegacy: 'Legacy engine',
+        badgeModern: 'Modern engine',
+        badgeTipLegacy: 'Flashing stays on this page using the legacy engine.',
+        badgeTipModern: 'Flashing will open the modern UVTools page for this profile.',
+        buttonFlash: 'Flash firmware',
+        buttonOpenModern: 'Open modern flasher'
+    },
+    fr: {
+        radioFamilyLabel: 'Famille de radio',
+        profileK5K6V1: 'UV-K5/K6 Version 1',
+        profileK5K6V2: 'UV-K5/K6 Version 2',
+        profileK1K5V3: 'Série UV-K1/K5 Version 3',
+        profileHelpV1: 'Utilisez cette page pour les firmwares UV-K5/K6 Version 1.',
+        profileHelpV2: 'Utilisez cette page pour les firmwares UV-K5/K6 Version 2.',
+        profileHelpV3: 'Ce profil utilise la page de flash moderne UVTools. Cliquez sur flasher pour continuer.',
+        badgeLegacy: 'Moteur legacy',
+        badgeModern: 'Moteur moderne',
+        badgeTipLegacy: 'Le flash reste sur cette page avec le moteur legacy.',
+        badgeTipModern: 'Le flash ouvrira la page moderne UVTools pour ce profil.',
+        buttonFlash: 'Flasher le firmware',
+        buttonOpenModern: 'Ouvrir le flasher moderne'
+    },
+    zh: {
+        radioFamilyLabel: '对讲机系列',
+        profileK5K6V1: 'UV-K5/K6 Version 1',
+        profileK5K6V2: 'UV-K5/K6 Version 2',
+        profileK1K5V3: 'UV-K1 系列/K5 Version 3',
+        profileHelpV1: '此页面用于 UV-K5/K6 Version 1 固件。',
+        profileHelpV2: '此页面用于 UV-K5/K6 Version 2 固件。',
+        profileHelpV3: '此配置使用现代 UVTools 刷机页面。点击刷写继续。',
+        badgeLegacy: '旧版引擎',
+        badgeModern: '现代引擎',
+        badgeTipLegacy: '刷写将留在当前页面，使用旧版引擎。',
+        badgeTipModern: '此配置刷写时会打开现代 UVTools 页面。',
+        buttonFlash: '写入固件',
+        buttonOpenModern: '打开现代刷机页面'
+    }
+};
+
+function resolveLang() {
+    const params = new URLSearchParams(window.location.search);
+    const requested = (params.get('lang') || navigator.language || 'en').toLowerCase();
+    if (requested.startsWith('fr')) return 'fr';
+    if (requested.startsWith('zh')) return 'zh';
+    return 'en';
+}
+
+const activeLang = resolveLang();
+
+function tr(key) {
+    const dict = LEGACY_I18N[activeLang] || LEGACY_I18N.en;
+    return dict[key] || LEGACY_I18N.en[key] || key;
+}
+
+const PROFILE_CONFIG = {
+    'k5k6-v1': {
+        engine: 'legacy',
+        helpKey: 'profileHelpV1'
+    },
+    'k5k6-v2': {
+        engine: 'legacy',
+        helpKey: 'profileHelpV2'
+    },
+    'k1k5-v3': {
+        engine: 'modern',
+        helpKey: 'profileHelpV3'
+    }
+};
+
+function updateStaticLocalizedUI() {
+    if (radioProfileLabel) radioProfileLabel.textContent = tr('radioFamilyLabel');
+
+    if (radioProfileSelect) {
+        const optionV1 = radioProfileSelect.querySelector('option[value="k5k6-v1"]');
+        const optionV2 = radioProfileSelect.querySelector('option[value="k5k6-v2"]');
+        const optionV3 = radioProfileSelect.querySelector('option[value="k1k5-v3"]');
+        if (optionV1) optionV1.textContent = tr('profileK5K6V1');
+        if (optionV2) optionV2.textContent = tr('profileK5K6V2');
+        if (optionV3) optionV3.textContent = tr('profileK1K5V3');
+    }
+}
+
+function getSelectedProfileId() {
+    const profileId = radioProfileSelect?.value || PROFILE_DEFAULT;
+    return PROFILE_CONFIG[profileId] ? profileId : PROFILE_DEFAULT;
+}
+
+function getSelectedProfile() {
+    const profileId = getSelectedProfileId();
+    return { id: profileId, ...PROFILE_CONFIG[profileId] };
+}
+
+function applyProfileFromQuery() {
+    if (!radioProfileSelect) return;
+    const queryString = window.location.search;
+    const urlParams = new URLSearchParams(queryString);
+    const profile = urlParams.get('profile');
+    if (profile && PROFILE_CONFIG[profile]) {
+        radioProfileSelect.value = profile;
+    }
+}
+
+function buildModernFlasherUrl() {
+    const target = new URL(MODERN_FLASHER_PATH, window.location.href);
+    const sourceParams = new URLSearchParams(window.location.search);
+    const firmwareURL = sourceParams.get('firmwareURL');
+
+    if (firmwareURL) {
+        target.searchParams.set('firmwareURL', firmwareURL);
+    }
+
+    target.searchParams.set('profile', 'k1k5-v3');
+    return target.toString();
+}
+
+function applyProfileUI() {
+    const profile = getSelectedProfile();
+    const isLegacy = profile.engine === 'legacy';
+
+    if (profileHelp) profileHelp.textContent = tr(profile.helpKey);
+    if (engineBadge) {
+        const badgeText = isLegacy ? tr('badgeLegacy') : tr('badgeModern');
+        const badgeTooltip = isLegacy ? tr('badgeTipLegacy') : tr('badgeTipModern');
+        engineBadge.textContent = badgeText;
+        engineBadge.title = badgeTooltip;
+        engineBadge.setAttribute('aria-label', `${badgeText}. ${badgeTooltip}`);
+        engineBadge.classList.toggle('badge-warning', isLegacy);
+        engineBadge.classList.toggle('badge-success', !isLegacy);
+    }
+    if (flashButtonText) flashButtonText.textContent = isLegacy ? tr('buttonFlash') : tr('buttonOpenModern');
+    if (customFileInput) customFileInput.disabled = !isLegacy;
+    if (customFileInputDiv) {
+        customFileInputDiv.classList.toggle('disabled', !isLegacy);
+    }
+
+    if (!isLegacy) {
+        flashButton.classList.remove('disabled');
+    } else if (!rawFirmware) {
+        flashButton.classList.add('disabled');
+    }
+}
+
+if (radioProfileSelect) {
+    radioProfileSelect.addEventListener('change', applyProfileUI);
+}
+
+updateStaticLocalizedUI();
+applyProfileFromQuery();
+applyProfileUI();
 
 
 function loadFW(encoded_firmware)
@@ -191,7 +357,18 @@ async function flash_flashFirmware(port, firmware) {
 }
 
 flashButton.addEventListener('click', async function () {
+    const profile = getSelectedProfile();
+    if (profile.engine === 'modern') {
+        window.location.href = buildModernFlasherUrl();
+        return;
+    }
+
     flashButton.classList.add('disabled');
+    if (!rawFirmware) {
+        log('Please select a firmware file first.');
+        flashButton.classList.add('disabled');
+        return;
+    }
     if (rawFirmware.length > 0xefff) {
         log('Firmware file is too large. Aborting.');
         flashButton.classList.remove('disabled');

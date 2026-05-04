@@ -6,7 +6,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <title>UV-K1 Series & UV-K5 V3 Web Tool</title>
+  <title>UVTools Multi-Firmware Web Tool</title>
   <link rel="icon" type="image/svg+xml" href="img/UVTools-favicon-color-v2.svg">
   <link rel="preload" href="locales/en.json" as="fetch" type="application/json" crossorigin="anonymous">
   <link rel="stylesheet" href="css/style.css" />
@@ -14,7 +14,7 @@
 <body>
   <main class="container">
     <header class="header" role="banner">
-      <h1 id="title" class="h1">UV-K1 Series & UV-K5 V3 Web Tool</h1>
+      <h1 id="title" class="h1">UVTools Multi-Firmware Web Tool</h1>
       <div class="language-selector">
         <label for="languageSelect" class="sr-only">Language</label>
         <select id="languageSelect" aria-label="Language">
@@ -25,7 +25,18 @@
       </div>
     </header>
 
-    <p class="subtitle" id="subtitle">Firmware flasher and calibration manager via Web Serial API</p>
+    <p class="subtitle" id="subtitle">Multi-firmware flasher and calibration manager via Web Serial API</p>
+
+    <section class="section profile-section" aria-labelledby="labelRadioProfile">
+      <label id="labelRadioProfile" for="radioProfile">Radio Family</label>
+      <select id="radioProfile" aria-describedby="profileHelp">
+        <option value="k5k6-v1">UV-K5/K6 Version 1</option>
+        <option value="k5k6-v2">UV-K5/K6 Version 2</option>
+        <option value="k1k5-v3" selected>UV-K1 Series/K5 Version 3</option>
+      </select>
+      <span id="engineBadge" class="engine-badge engine-modern" aria-live="polite">Modern engine</span>
+      <p class="profile-help" id="profileHelp">Choose the radio family before flashing.</p>
+    </section>
 
     <!-- TABS -->
     <div class="tabs" role="tablist">
@@ -37,7 +48,7 @@
     <!-- FLASH FIRMWARE TAB -->
     <div class="tab-content active" id="flash-content" role="tabpanel">
 
-      <section class="section" aria-labelledby="labelFirmwareFile">
+      <section class="section" id="firmwareFileSection" aria-labelledby="labelFirmwareFile">
         <label id="labelFirmwareFile">Firmware File (.bin)</label>
         <div class="file-input-wrapper">
           <input type="file" id="firmwareFile" accept=".bin" />
