@@ -400,6 +400,13 @@ function clearFirmwareSelection() {
   updateFlashButton();
 }
 
+function resetRadioProfileSelection() {
+  if (!radioProfileSelect) return;
+  radioProfileSelect.value = '';
+  applyRadioProfileUI();
+  updateInfoBox();
+}
+
 // ---------- Auto-load firmware from URL ----------
 
 async function loadFirmwareFromURL(url) {
@@ -940,6 +947,7 @@ async function flashLegacyFirmwareFlow() {
     await flashLegacyFirmware(legacyPort, unpackedFirmware);
     log(t('legacyFlashSuccess'), 'success');
     clearFirmwareSelection();
+    resetRadioProfileSelection();
   } finally {
     if (progressContainer) progressContainer.style.display = 'none';
     isFlashing = false;
@@ -1024,6 +1032,7 @@ async function flashFirmware() {
     updateProgress(100);
     log(t('programmingComplete'), 'success');
     clearFirmwareSelection();
+    resetRadioProfileSelection();
 
     setTimeout(() => {
       if (progressContainer) progressContainer.style.display = 'none';
