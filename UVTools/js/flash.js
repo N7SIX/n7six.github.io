@@ -100,7 +100,9 @@ const calibFileName = document.getElementById('calibFileName');
 const calibFileButton = document.getElementById('calibFileButton');
 
 const PROFILE_DEFAULT = null;
-const LEGACY_FLASHER_PATH = '../uvtools/index.html';
+const LEGACY_VERSION_INFO_OFFSET = 0x2000;
+const LEGACY_VERSION_INFO_LENGTH = 16;
+const LEGACY_MAX_FIRMWARE_SIZE = 0xefff;
 const PROFILE_CONFIG = {
   'k5k6-v1': { engine: 'legacy', helpKey: 'profileHelpLegacy' },
   'k5k6-v2': { engine: 'legacy', helpKey: 'profileHelpLegacy' },
@@ -150,23 +152,6 @@ function applyProfileFromQuery() {
   if (profile && PROFILE_CONFIG[profile]) {
     radioProfileSelect.value = profile;
   }
-}
-
-function buildLegacyFlasherUrl() {
-  const target = new URL(LEGACY_FLASHER_PATH, window.location.href);
-  const params = new URLSearchParams(window.location.search);
-  const firmwareUrl = params.get('firmwareURL') || params.get('fw');
-
-  if (firmwareUrl) {
-    target.searchParams.set('firmwareURL', firmwareUrl);
-  }
-
-  target.searchParams.set('profile', getSelectedProfileId());
-  return target.toString();
-}
-
-function routeToLegacyFlasher() {
-  window.location.href = buildLegacyFlasherUrl();
 }
 
 function setSelectedProfile(profileId) {
@@ -231,8 +216,8 @@ function applyRadioProfileUI() {
       engineBadgeEl.classList.toggle('engine-modern', !isLegacy);
     }
   }
-  if (firmwareFileInput) firmwareFileInput.disabled = isLegacy;
-  if (firmwareFileSection) firmwareFileSection.classList.toggle('is-disabled', isLegacy);
+  if (firmwareFileInput) firmwareFileInput.disabled = false;
+  if (firmwareFileSection) firmwareFileSection.classList.remove('is-disabled');
   if (dumpBtn) dumpBtn.disabled = !hasProfile || isLegacy || isDumping;
 
   updateRestoreButton();
@@ -472,9 +457,8 @@ async function maybeLoadFirmwareFromQuery() {
 function updateFlashButton() {
   if (!flashBtn) return;
   const profile = getSelectedProfile();
-  const needsFirmwareFile = !profile || profile.engine !== 'legacy';
-  flashBtn.textContent = profile?.engine === 'legacy' ? t('openLegacyFlasherBtn') : t('flashBtn');
-  flashBtn.disabled = isFlashing || !profile || (needsFirmwareFile && !firmwareData);
+  flashBtn.textContent = t('flashBtn');
+  flashBtn.disabled = isFlashing || !profile || !firmwareData;
 }
 
 // ========== CALIBRATION FILE INPUT ==========
@@ -739,12 +723,236 @@ function arrayToHex(arr) {
   return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join(' ');
 }
 
+function unpackLegacyFirmware(encodedFirmware) {
+  if (encodedFirmware.length <= LEGACY_VERSION_INFO_OFFSET + LEGACY_VERSION_INFO_LENGTH + 2) {
+    throw new Error(t('legacyFirmwareInvalid'));
+  }
+
+  const body = encodedFirmware.subarray(0, encodedFirmware.length - 2);
+  const expectedCrc = encodedFirmware[encodedFirmware.length - 2] | (encodedFirmware[encodedFirmware.length - 1] << 8);
+  const computedCrc = calcCRC(body, 0, body.length);
+
+  if (computedCrc !== expectedCrc) {
+    throw new Error(t('legacyFirmwareInvalid'));
+  }
+
+  const decodedFirmware = xorLegacyFirmware(body);
+  const versionInfo = decodedFirmware.slice(LEGACY_VERSION_INFO_OFFSET, LEGACY_VERSION_INFO_OFFSET + LEGACY_VERSION_INFO_LENGTH);
+  const unpackedFirmware = new Uint8Array(decodedFirmware.length - LEGACY_VERSION_INFO_LENGTH);
+
+  unpackedFirmware.set(decodedFirmware.subarray(0, LEGACY_VERSION_INFO_OFFSET));
+  unpackedFirmware.set(decodedFirmware.subarray(LEGACY_VERSION_INFO_OFFSET + LEGACY_VERSION_INFO_LENGTH), LEGACY_VERSION_INFO_OFFSET);
+
+  return { versionInfo, unpackedFirmware };
+}
+
+function legacyPacketize(data) {
+  const payload = new Uint8Array(data.length + 2);
+  payload.set(data, 0);
+  const crc = calcCRC(data, 0, data.length);
+  payload[data.length] = crc & 0xff;
+  payload[data.length + 1] = (crc >> 8) & 0xff;
+  obfuscate(payload, 0, payload.length);
+
+  const packet = new Uint8Array(payload.length + 6);
+  packet[0] = 0xab;
+  packet[1] = 0xcd;
+  packet[2] = data.length & 0xff;
+  packet[3] = (data.length >> 8) & 0xff;
+  packet.set(payload, 4);
+  packet[packet.length - 2] = 0xdc;
+  packet[packet.length - 1] = 0xba;
+  return packet;
+}
+
+function legacyUnpacketize(packet) {
+  const payloadLength = packet[2] | (packet[3] << 8);
+  const payload = packet.slice(4, 4 + payloadLength + 2);
+  obfuscate(payload, 0, payload.length);
+  return payload.slice(0, payloadLength);
+}
+
+async function connectLegacyPort() {
+  log(t('requestingPort'), 'info');
+  const legacyPort = await navigator.serial.requestPort();
+  log(t('openingPort'), 'info');
+  await legacyPort.open({ baudRate: BAUDRATE });
+  log(t('connected'), 'success');
+  return legacyPort;
+}
+
+async function disconnectLegacyPort(legacyPort) {
+  if (!legacyPort) return;
+  try {
+    await legacyPort.close();
+  } catch {}
+  log(t('disconnected'), 'info');
+}
+
+async function legacySendPacket(legacyPort, data) {
+  const writer = legacyPort.writable.getWriter();
+  try {
+    await writer.write(legacyPacketize(data));
+  } finally {
+    writer.releaseLock();
+  }
+}
+
+async function legacyReadPacket(legacyPort, expectedType, timeoutMs = 1000) {
+  const reader = legacyPort.readable.getReader();
+  let buffer = new Uint8Array();
+  let timeoutId = null;
+
+  try {
+    return await new Promise((resolve, reject) => {
+      const finish = (callback, value) => {
+        if (timeoutId) clearTimeout(timeoutId);
+        callback(value);
+      };
+
+      const pump = () => {
+        reader.read().then(({ value, done }) => {
+          if (done) {
+            finish(reject, new Error(t('legacyNoData')));
+            return;
+          }
+
+          buffer = new Uint8Array([...buffer, ...value]);
+
+          while (buffer.length > 0 && buffer[0] !== 0xab) {
+            buffer = buffer.slice(1);
+          }
+
+          while (buffer.length >= 8 && buffer[0] === 0xab && buffer[1] === 0xcd) {
+            const payloadLength = buffer[2] | (buffer[3] << 8);
+            const totalLength = payloadLength + 8;
+            if (buffer.length < totalLength) break;
+
+            const packet = buffer.slice(0, totalLength);
+            buffer = buffer.slice(totalLength);
+
+            if (packet[totalLength - 2] !== 0xdc || packet[totalLength - 1] !== 0xba) {
+              continue;
+            }
+
+            const data = legacyUnpacketize(packet);
+            if (data[0] !== expectedType) {
+              continue;
+            }
+
+            finish(resolve, data);
+            return;
+          }
+
+          pump();
+        }).catch(error => finish(reject, error));
+      };
+
+      timeoutId = setTimeout(() => {
+        reader.cancel().catch(() => {});
+        reject(new Error(t('legacyPacketTimeout')));
+      }, timeoutMs);
+
+      pump();
+    });
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+    reader.releaseLock();
+  }
+}
+
+async function legacyInitFlash(legacyPort, versionInfo) {
+  const payload = new Uint8Array([0x30, 0x05, versionInfo.length, 0x00, ...versionInfo]);
+  await legacySendPacket(legacyPort, payload);
+  return legacyReadPacket(legacyPort, 0x18, 2000);
+}
+
+function legacyVersionMatches(bootInfoPacket, versionInfo) {
+  if (versionInfo[0] === 0x2a) return true;
+  return bootInfoPacket[0x14] === versionInfo[0];
+}
+
+function legacyBuildFlashCommand(data, address, totalSize) {
+  const block = new Uint8Array(0x100);
+  block.set(data, 0);
+
+  const finalAddress = (totalSize + 0xff) & ~0xff;
+  if (finalAddress > 0xf000) throw new Error(t('legacyFirmwareTooLarge'));
+
+  return new Uint8Array([
+    0x19, 0x05, 0x0c, 0x01, 0x8a, 0x8d, 0x9f, 0x1d,
+    (address >> 8) & 0xff, address & 0xff,
+    (finalAddress >> 8) & 0xff, 0x00,
+    0x01, 0x00, 0x00, 0x00,
+    ...block
+  ]);
+}
+
+async function flashLegacyFirmware(legacyPort, unpackedFirmware) {
+  if (unpackedFirmware.length > LEGACY_MAX_FIRMWARE_SIZE) {
+    throw new Error(t('legacyFirmwareTooLarge'));
+  }
+
+  for (let offset = 0; offset < unpackedFirmware.length; offset += 0x100) {
+    const chunk = unpackedFirmware.slice(offset, offset + 0x100);
+    await legacySendPacket(legacyPort, legacyBuildFlashCommand(chunk, offset, unpackedFirmware.length));
+    await legacyReadPacket(legacyPort, 0x1a, 2000);
+    const percent = ((offset + chunk.length) / unpackedFirmware.length) * 100;
+    updateProgress(Math.round(percent));
+    log(t('legacyFlashingProgress', percent.toFixed(1)), 'info');
+  }
+}
+
+async function flashLegacyFirmwareFlow() {
+  if (!firmwareData) return;
+
+  isFlashing = true;
+  updateFlashButton();
+  if (progressContainer) progressContainer.style.display = 'block';
+  updateProgress(0);
+
+  let legacyPort = null;
+
+  try {
+    const { versionInfo, unpackedFirmware } = unpackLegacyFirmware(firmwareData);
+    legacyPort = await connectLegacyPort();
+
+    const readyPacket = await legacyReadPacket(legacyPort, 0x18, 1500);
+    if (readyPacket[0] !== 0x18) {
+      throw new Error(t('legacyWrongPacket'));
+    }
+    log(t('legacyRadioReady'), 'info');
+
+    const initResponse = await legacyInitFlash(legacyPort, versionInfo);
+    const versionEnd = versionInfo.indexOf(0) === -1 ? versionInfo.length : versionInfo.indexOf(0);
+    const versionText = new TextDecoder().decode(versionInfo.subarray(0, versionEnd));
+    log(t('legacyVersionDetected', versionText), 'info');
+
+    if (!legacyVersionMatches(initResponse, versionInfo)) {
+      throw new Error(t('legacyVersionCheckFailed'));
+    }
+    log(t('legacyVersionCheckPassed'), 'success');
+
+    await flashLegacyFirmware(legacyPort, unpackedFirmware);
+    log(t('legacyFlashSuccess'), 'success');
+  } finally {
+    if (progressContainer) progressContainer.style.display = 'none';
+    isFlashing = false;
+    updateFlashButton();
+    await disconnectLegacyPort(legacyPort);
+  }
+}
+
 // ========== FLASH FIRMWARE (from original flash.js) ==========
 flashBtn.addEventListener('click', async () => {
   const profile = getSelectedProfile();
   if (!profile) return;
   if (profile.engine === 'legacy') {
-    routeToLegacyFlasher();
+    try {
+      await flashLegacyFirmwareFlow();
+    } catch (e) {
+      log(t('flashError', e?.message ?? String(e)), 'error');
+    }
     return;
   }
   if (!firmwareData || isFlashing) return;
