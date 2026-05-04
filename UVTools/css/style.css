@@ -158,9 +158,9 @@ select {
   border: 2px solid var(--border);
   border-radius: 8px;
   font-size: 14px;
-  background: #fff;
+  background: var(--card);
   color: var(--text);
-  transition: border-color 0.3s;
+  transition: border-color 0.3s, background 0.3s, color 0.3s;
 }
 
 select:focus {
@@ -483,6 +483,18 @@ button:disabled {
 
   .download-link a {
     color: #7ED957;
+  }
+
+  .engine-badge.engine-modern {
+    background: #1a3d1a;
+    color: #7ed957;
+    border-color: #3a7a3a;
+  }
+
+  .engine-badge.engine-legacy {
+    background: #3d2e00;
+    color: #f2bf64;
+    border-color: #7a5a00;
   }
 }
 
