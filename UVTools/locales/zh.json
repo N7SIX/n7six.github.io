@@ -34,6 +34,8 @@
   "dumpDescription": "从您的 UV-K5 V3 或 UV-K1 设备提取校准数据。",
   "downloadText": "下载 calibration.dat",
   "firmwareLoaded": "固件已加载：{0}，大小：{1} 字节",
+  "autoDetectLegacy": "已自动识别为旧版固件格式。已选择配置：{0}",
+  "autoDetectNative": "已自动识别为现代固件格式。已选择配置：{0}",
   "calibLoaded": "校准文件已加载：{0}，大小：{1} 字节",
   "calibInvalidSize": "校准文件大小无效。应为 512 字节，实际为 {0} 字节",
   "connected": "已连接到串口",

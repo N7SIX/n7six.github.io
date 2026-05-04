@@ -31,6 +31,17 @@ const OBFUS_TBL = new Uint8Array([
   0x21, 0x35, 0xd5, 0x40, 0x13, 0x03, 0xe9, 0x80
 ]);
 
+const LEGACY_FW_XOR_TBL = new Uint8Array([
+  0x47, 0x22, 0xc0, 0x52, 0x5d, 0x57, 0x48, 0x94, 0xb1, 0x60, 0x60, 0xdb, 0x6f, 0xe3, 0x4c, 0x7c,
+  0xd8, 0x4a, 0xd6, 0x8b, 0x30, 0xec, 0x25, 0xe0, 0x4c, 0xd9, 0x00, 0x7f, 0xbf, 0xe3, 0x54, 0x05,
+  0xe9, 0x3a, 0x97, 0x6b, 0xb0, 0x6e, 0x0c, 0xfb, 0xb1, 0x1a, 0xe2, 0xc9, 0xc1, 0x56, 0x47, 0xe9,
+  0xba, 0xf1, 0x42, 0xb6, 0x67, 0x5f, 0x0f, 0x96, 0xf7, 0xc9, 0x3c, 0x84, 0x1b, 0x26, 0xe1, 0x4e,
+  0x3b, 0x6f, 0x66, 0xe6, 0xa0, 0x6a, 0xb0, 0xbf, 0xc6, 0xa5, 0x70, 0x3a, 0xba, 0x18, 0x9e, 0x27,
+  0x1a, 0x53, 0x5b, 0x71, 0xb1, 0x94, 0x1e, 0x18, 0xf2, 0xd6, 0x81, 0x02, 0x22, 0xfd, 0x5a, 0x28,
+  0x91, 0xdb, 0xba, 0x5d, 0x64, 0xc6, 0xfe, 0x86, 0x83, 0x9c, 0x50, 0x1c, 0x73, 0x03, 0x11, 0xd6,
+  0xaf, 0x30, 0xf4, 0x2c, 0x77, 0xb2, 0x7d, 0xbb, 0x3f, 0x29, 0x28, 0x57, 0x22, 0xd6, 0x92, 0x8b
+]);
+
 // Calibration memory layout
 const CALIB_SIZE = 512; // bytes
 const CHUNK_SIZE = 16;
@@ -155,6 +166,50 @@ function buildLegacyFlasherUrl() {
 
 function routeToLegacyFlasher() {
   window.location.href = buildLegacyFlasherUrl();
+}
+
+function setSelectedProfile(profileId) {
+  if (!radioProfileSelect || !PROFILE_CONFIG[profileId]) return;
+  radioProfileSelect.value = profileId;
+  applyRadioProfileUI();
+  updateInfoBox();
+}
+
+function xorLegacyFirmware(data) {
+  const out = new Uint8Array(data.length);
+  for (let i = 0; i < data.length; i++) {
+    out[i] = data[i] ^ LEGACY_FW_XOR_TBL[i % LEGACY_FW_XOR_TBL.length];
+  }
+  return out;
+}
+
+function detectProfileFromFirmware(data) {
+  // Legacy packed firmware has a CRC16 trailer over encoded content and version bytes at 0x2000 after XOR decode.
+  if (data.length > 0x2012) {
+    const body = data.subarray(0, data.length - 2);
+    const expectedCrc = data[data.length - 2] | (data[data.length - 1] << 8);
+    const computedCrc = calcCRC(body, 0, body.length);
+
+    if (computedCrc === expectedCrc) {
+      const decoded = xorLegacyFirmware(body);
+      const versionByte = decoded[0x2000];
+      if (versionByte === 0x32) return { profileId: 'k5k6-v1', mode: 'legacy' }; // '2'
+      if (versionByte === 0x33 || versionByte === 0x34 || versionByte === 0x2a) return { profileId: 'k5k6-v2', mode: 'legacy' }; // '3', '4', '*'
+      return { profileId: 'k5k6-v2', mode: 'legacy' };
+    }
+  }
+
+  return { profileId: 'k1k5-v3', mode: 'native' };
+}
+
+function autoSelectProfileFromFirmware(data) {
+  const detected = detectProfileFromFirmware(data);
+  setSelectedProfile(detected.profileId);
+  if (detected.mode === 'legacy') {
+    log(t('autoDetectLegacy', t(detected.profileId === 'k5k6-v1' ? 'profileK5K6V1' : 'profileK5K6V2')), 'info');
+  } else {
+    log(t('autoDetectNative', t('profileK1K5V3')), 'info');
+  }
 }
 
 function applyRadioProfileUI() {
@@ -324,6 +379,7 @@ if (firmwareFileInput) {
 
 function setFirmwareBuffer(buf, name = 'firmware.bin') {
   firmwareData = new Uint8Array(buf);
+  autoSelectProfileFromFirmware(firmwareData);
   if (fileName) {
     fileName.textContent = name;
     fileName.classList.add('has-file');

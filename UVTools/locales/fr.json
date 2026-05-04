@@ -34,6 +34,8 @@
   "dumpDescription": "Extraire les données de calibration de votre appareil UV-K5 V3 or UV-K1.",
   "downloadText": "Télécharger calibration.dat",
   "firmwareLoaded": "Firmware chargé : {0}, taille : {1} octets",
+  "autoDetectLegacy": "Format de firmware legacy détecté automatiquement. Profil sélectionné : {0}",
+  "autoDetectNative": "Format de firmware moderne détecté automatiquement. Profil sélectionné : {0}",
   "calibLoaded": "Fichier de calibration chargé : {0}, taille : {1} octets",
   "calibInvalidSize": "Taille du fichier de calibration invalide. Attendu 512 octets, reçu {0} octets",
   "connected": "Connecté au port série",
