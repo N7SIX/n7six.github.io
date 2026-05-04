@@ -44,7 +44,7 @@
   "infoBoxDump": "<strong>注意：</strong> 此应用需要 Chrome/Edge/Opera 浏览器。导出或恢复校准数据前请确保对讲机处于 <strong>正常模式</strong>。",
   "fileNoFile": "未选择文件",
   "fileChoose": "选择文件",
-  "dumpDescription": "从您的 UV-K5 V3 或 UV-K1 设备提取校准数据。",
+  "dumpDescription": "从已连接的对讲机中提取校准数据，连接的机型将自动识别。",
   "downloadText": "下载 calibration.dat",
   "firmwareLoaded": "固件已加载：{0}，大小：{1} 字节",
   "autoDetectLegacy": "已自动识别为旧版固件格式。已选择配置：{0}",

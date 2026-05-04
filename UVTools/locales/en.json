@@ -44,7 +44,7 @@
   "infoBoxDump": "<strong>Note:</strong> This application requires Chrome/Edge/Opera. Make sure your radio is in <strong>normal mode</strong> before dump or restore.",
   "fileNoFile": "No file selected",
   "fileChoose": "Choose file",
-  "dumpDescription": "Extract calibration data from your UV-K5 V3 or UV-K1 device.",
+  "dumpDescription": "Extract calibration data from your radio. The connected radio is auto-detected.",
   "downloadText": "Download calibration.dat",
   "firmwareLoaded": "Firmware loaded: {0}, size: {1} bytes",
   "autoDetectLegacy": "Auto-detected legacy firmware format. Selected profile: {0}",

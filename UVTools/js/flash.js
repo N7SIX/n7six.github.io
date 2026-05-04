@@ -218,7 +218,7 @@ function applyRadioProfileUI() {
   }
   if (firmwareFileInput) firmwareFileInput.disabled = false;
   if (firmwareFileSection) firmwareFileSection.classList.remove('is-disabled');
-  if (dumpBtn) dumpBtn.disabled = !hasProfile || isLegacy || isDumping;
+  if (dumpBtn) dumpBtn.disabled = isDumping;
 
   updateRestoreButton();
   updateFlashButton();
@@ -489,7 +489,7 @@ if (calibFileInput) {
 function updateRestoreButton() {
   if (!restoreBtn) return;
   const profile = getSelectedProfile();
-  restoreBtn.disabled = !profile || profile.engine === 'legacy' || !calibData || isRestoring;
+  restoreBtn.disabled = !calibData || isRestoring;
 }
 
 // ========== SERIAL CONNECTION ==========
