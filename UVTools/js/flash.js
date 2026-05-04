@@ -99,7 +99,7 @@ const calibFileLabel = document.getElementById('calibFileLabel');
 const calibFileName = document.getElementById('calibFileName');
 const calibFileButton = document.getElementById('calibFileButton');
 
-const PROFILE_DEFAULT = 'k1k5-v3';
+const PROFILE_DEFAULT = null;
 const LEGACY_FLASHER_PATH = '../uvtools/index.html';
 const PROFILE_CONFIG = {
   'k5k6-v1': { engine: 'legacy', helpKey: 'profileHelpLegacy' },
@@ -134,12 +134,13 @@ function t(key, ...args) {
 }
 
 function getSelectedProfileId() {
-  const profileId = radioProfileSelect?.value || PROFILE_DEFAULT;
+  const profileId = radioProfileSelect?.value || '';
   return PROFILE_CONFIG[profileId] ? profileId : PROFILE_DEFAULT;
 }
 
 function getSelectedProfile() {
   const profileId = getSelectedProfileId();
+  if (!profileId) return null;
   return { id: profileId, ...PROFILE_CONFIG[profileId] };
 }
 
@@ -214,21 +215,25 @@ function autoSelectProfileFromFirmware(data) {
 
 function applyRadioProfileUI() {
   const profile = getSelectedProfile();
-  const isLegacy = profile.engine === 'legacy';
+  const isLegacy = profile?.engine === 'legacy';
+  const hasProfile = Boolean(profile);
 
-  if (profileHelpEl) profileHelpEl.textContent = t(profile.helpKey);
+  if (profileHelpEl) profileHelpEl.textContent = hasProfile ? t(profile.helpKey) : t('profileHelpAuto');
   if (engineBadgeEl) {
-    const badgeText = isLegacy ? t('engineBadgeLegacy') : t('engineBadgeNative');
-    const badgeTooltip = isLegacy ? t('engineBadgeLegacyTooltip') : t('engineBadgeNativeTooltip');
-    engineBadgeEl.textContent = badgeText;
-    engineBadgeEl.title = badgeTooltip;
-    engineBadgeEl.setAttribute('aria-label', `${badgeText}. ${badgeTooltip}`);
-    engineBadgeEl.classList.toggle('engine-legacy', isLegacy);
-    engineBadgeEl.classList.toggle('engine-modern', !isLegacy);
+    engineBadgeEl.hidden = !hasProfile;
+    if (hasProfile) {
+      const badgeText = isLegacy ? t('engineBadgeLegacy') : t('engineBadgeNative');
+      const badgeTooltip = isLegacy ? t('engineBadgeLegacyTooltip') : t('engineBadgeNativeTooltip');
+      engineBadgeEl.textContent = badgeText;
+      engineBadgeEl.title = badgeTooltip;
+      engineBadgeEl.setAttribute('aria-label', `${badgeText}. ${badgeTooltip}`);
+      engineBadgeEl.classList.toggle('engine-legacy', isLegacy);
+      engineBadgeEl.classList.toggle('engine-modern', !isLegacy);
+    }
   }
   if (firmwareFileInput) firmwareFileInput.disabled = isLegacy;
   if (firmwareFileSection) firmwareFileSection.classList.toggle('is-disabled', isLegacy);
-  if (dumpBtn) dumpBtn.disabled = isLegacy || isDumping;
+  if (dumpBtn) dumpBtn.disabled = !hasProfile || isLegacy || isDumping;
 
   updateRestoreButton();
   updateFlashButton();
@@ -245,9 +250,11 @@ window.updateUI = function updateUI() {
   if (baselineDev) baselineDev.textContent = t('baselineDeveloped');
 
   if (radioProfileSelect) {
+    const optionBlank = radioProfileSelect.querySelector('option[value=""]');
     const optionV1 = radioProfileSelect.querySelector('option[value="k5k6-v1"]');
     const optionV2 = radioProfileSelect.querySelector('option[value="k5k6-v2"]');
     const optionV3 = radioProfileSelect.querySelector('option[value="k1k5-v3"]');
+    if (optionBlank) optionBlank.textContent = t('profilePlaceholder');
     if (optionV1) optionV1.textContent = t('profileK5K6V1');
     if (optionV2) optionV2.textContent = t('profileK5K6V2');
     if (optionV3) optionV3.textContent = t('profileK1K5V3');
@@ -312,7 +319,7 @@ function updateInfoBox() {
   const profile = getSelectedProfile();
   
   if (tabName === 'flash') {
-    infoBoxEl.innerHTML = profile.engine === 'legacy' ? t('infoBoxLegacy') : t('infoBox');
+    infoBoxEl.innerHTML = profile?.engine === 'legacy' ? t('infoBoxLegacy') : t('infoBox');
   } else {
     infoBoxEl.innerHTML = t('infoBoxDump');
   }
@@ -465,9 +472,9 @@ async function maybeLoadFirmwareFromQuery() {
 function updateFlashButton() {
   if (!flashBtn) return;
   const profile = getSelectedProfile();
-  const needsFirmwareFile = profile.engine !== 'legacy';
-  flashBtn.textContent = profile.engine === 'legacy' ? t('openLegacyFlasherBtn') : t('flashBtn');
-  flashBtn.disabled = isFlashing || (needsFirmwareFile && !firmwareData);
+  const needsFirmwareFile = !profile || profile.engine !== 'legacy';
+  flashBtn.textContent = profile?.engine === 'legacy' ? t('openLegacyFlasherBtn') : t('flashBtn');
+  flashBtn.disabled = isFlashing || !profile || (needsFirmwareFile && !firmwareData);
 }
 
 // ========== CALIBRATION FILE INPUT ==========
@@ -498,7 +505,7 @@ if (calibFileInput) {
 function updateRestoreButton() {
   if (!restoreBtn) return;
   const profile = getSelectedProfile();
-  restoreBtn.disabled = profile.engine === 'legacy' || !calibData || isRestoring;
+  restoreBtn.disabled = !profile || profile.engine === 'legacy' || !calibData || isRestoring;
 }
 
 // ========== SERIAL CONNECTION ==========
@@ -735,6 +742,7 @@ function arrayToHex(arr) {
 // ========== FLASH FIRMWARE (from original flash.js) ==========
 flashBtn.addEventListener('click', async () => {
   const profile = getSelectedProfile();
+  if (!profile) return;
   if (profile.engine === 'legacy') {
     routeToLegacyFlasher();
     return;

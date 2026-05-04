@@ -30,12 +30,13 @@
     <section class="section profile-section" aria-labelledby="labelRadioProfile">
       <label id="labelRadioProfile" for="radioProfile">Radio Family</label>
       <select id="radioProfile" aria-describedby="profileHelp">
+        <option value="" selected>Select a radio family</option>
         <option value="k5k6-v1">UV-K5/K6 Version 1</option>
         <option value="k5k6-v2">UV-K5/K6 Version 2</option>
-        <option value="k1k5-v3" selected>UV-K1 Series/K5 Version 3</option>
+        <option value="k1k5-v3">UV-K1 Series/K5 Version 3</option>
       </select>
-      <span id="engineBadge" class="engine-badge engine-modern" aria-live="polite">Modern engine</span>
-      <p class="profile-help" id="profileHelp">Choose the radio family before flashing.</p>
+      <span id="engineBadge" class="engine-badge engine-modern" aria-live="polite" hidden>Modern engine</span>
+      <p class="profile-help" id="profileHelp">Select a radio family or load firmware to auto-detect it.</p>
     </section>
 
     <!-- TABS -->
