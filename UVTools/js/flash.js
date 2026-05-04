@@ -935,6 +935,7 @@ async function flashLegacyFirmwareFlow() {
 
     await flashLegacyFirmware(legacyPort, unpackedFirmware);
     log(t('legacyFlashSuccess'), 'success');
+    clearFirmwareSelection();
   } finally {
     if (progressContainer) progressContainer.style.display = 'none';
     isFlashing = false;
