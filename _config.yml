@@ -24,4 +24,21 @@ markdown: kramdown
 plugins:
   - jekyll-paginate
   - jekyll-sitemap
+  - jekyll-seo-tag
 paginate: 5
+
+# Exclude files and folders from the site build
+exclude:
+  - node_modules
+  - vendor
+  - test
+  - Gemfile
+  - Gemfile.lock
+  - package.json
+  - package-lock.json
+  - README.md
+  - .github
+
+# Include any special files if needed
+# include:
+#   - somefile.txt
