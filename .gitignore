@@ -1,3 +1,12 @@
 _site
 .sass-cache
 .jekyll-metadata
+node_modules/
+vendor/
+.DS_Store
+.jekyll-cache/
+Gemfile.lock
+package-lock.json
+*.log
+*.tmp
+*.swp

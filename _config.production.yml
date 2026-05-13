@@ -1,0 +1,4 @@
+# Jekyll production config
+# Usage: jekyll build --config _config.yml,_config.production.yml
+url: "https://n7six.github.io"
+environment: production
