@@ -1504,13 +1504,3 @@ if (!('serial' in navigator)) {
 })();
 
 // ========== Version ==========
-
-document.addEventListener("DOMContentLoaded", () => {
-  fetch("locales/version.json")
-    .then(r => r.json())
-    .then(v => {
-      const bl = document.getElementById("uvtools-baseline-version");
-      if (bl) bl.textContent = `UVTools v${v.version}`;
-    })
-    .catch(() => console.warn("Impossible to load version.json"));
-});
