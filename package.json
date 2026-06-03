@@ -4,7 +4,7 @@
   "description": "Static site for n7six.github.io",
   "scripts": {
     "lint:js": "eslint UVTools/js/*.js",
-    "lint:css": "stylelint 'css/**/*.css' 'sass/**/*.scss'",
+    "lint:css": "stylelint 'css/style*.css'",
     "format": "prettier --write ."
   },
   "devDependencies": {
