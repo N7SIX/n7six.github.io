@@ -1174,6 +1174,71 @@ async function programFirmware() {
 // ========== EEPROM READ HELPER ==========
 const EEPROM_FULL_SIZE = 0x10000; // 64 KB
 
+function isLikelyEmptyCalibrationDump(data) {
+  if (!data || data.length === 0) return true;
+
+  let zeroCount = 0;
+  let ffCount = 0;
+  for (let i = 0; i < data.length; i++) {
+    if (data[i] === 0x00) zeroCount++;
+    if (data[i] === 0xFF) ffCount++;
+  }
+
+  const maxCount = Math.max(zeroCount, ffCount);
+  const ratio = maxCount / data.length;
+  return ratio >= 0.98;
+}
+
+function analyzeDumpData(data) {
+  const histogram = new Uint32Array(256);
+  for (let i = 0; i < data.length; i++) histogram[data[i]]++;
+
+  let uniqueBytes = 0;
+  let dominantByte = 0;
+  let dominantCount = 0;
+  for (let i = 0; i < histogram.length; i++) {
+    const count = histogram[i];
+    if (count > 0) uniqueBytes++;
+    if (count > dominantCount) {
+      dominantCount = count;
+      dominantByte = i;
+    }
+  }
+
+  return {
+    size: data.length,
+    uniqueBytes,
+    dominantByte,
+    dominantCount,
+    dominantRatio: data.length > 0 ? dominantCount / data.length : 1
+  };
+}
+
+function logDumpStats(label, data) {
+  const stats = analyzeDumpData(data);
+  log(
+    `${label} stats: size=${stats.size} bytes, unique=${stats.uniqueBytes}, dominant=0x${stats.dominantByte
+      .toString(16)
+      .toUpperCase()
+      .padStart(2, '0')} (${(stats.dominantRatio * 100).toFixed(1)}%)`,
+    'info'
+  );
+
+  if (stats.dominantRatio >= 0.98) {
+    log(
+      `${label} appears suspiciously uniform (mostly 0x${stats.dominantByte
+        .toString(16)
+        .toUpperCase()
+        .padStart(2, '0')}). Verify radio mode and connection quality.`,
+      'error'
+    );
+  }
+}
+
+function getAlternateCalibOffset(offset) {
+  return offset === 0xB000 ? 0x1E00 : 0xB000;
+}
+
 async function readEepromRegion(devInfo, startOffset, size, onProgress) {
   const data = new Uint8Array(size);
   let offset = startOffset;
@@ -1235,7 +1300,23 @@ dumpBtn.addEventListener('click', async () => {
     const devInfo = await requestDeviceInfo();
     log(t('dumpingData'), 'info');
 
-    const dumpedData = await readEepromRegion(devInfo, CALIB_OFFSET, CALIB_SIZE, pct => updateProgress(pct));
+    log(t('readingEeprom', CALIB_OFFSET.toString(16).toUpperCase()), 'info');
+    let dumpedData = await readEepromRegion(devInfo, CALIB_OFFSET, CALIB_SIZE, pct => updateProgress(pct));
+
+    if (isLikelyEmptyCalibrationDump(dumpedData)) {
+      const alternateOffset = getAlternateCalibOffset(CALIB_OFFSET);
+      log(`Calibration dump looks empty at 0x${CALIB_OFFSET.toString(16).toUpperCase()}, trying 0x${alternateOffset.toString(16).toUpperCase()}...`, 'info');
+      const fallbackData = await readEepromRegion(devInfo, alternateOffset, CALIB_SIZE, pct => updateProgress(pct));
+      if (!isLikelyEmptyCalibrationDump(fallbackData)) {
+        dumpedData = fallbackData;
+        CALIB_OFFSET = alternateOffset;
+        log(`Using calibration offset 0x${alternateOffset.toString(16).toUpperCase()} based on content check.`, 'success');
+      } else {
+        log('Calibration dump still appears mostly empty after fallback offset probe.', 'error');
+      }
+    }
+
+    logDumpStats('Calibration dump', dumpedData);
 
     updateProgress(100);
     log(t('dumpComplete'), 'success');
@@ -1282,6 +1363,7 @@ if (dumpFullBtn) {
       log(t('dumpFullStarted'), 'info');
 
       const fullData = await readEepromRegion(devInfo, 0, EEPROM_FULL_SIZE, pct => updateProgress(pct));
+      logDumpStats('Full EEPROM dump', fullData);
 
       updateProgress(100);
       log(t('dumpFullComplete'), 'success');
@@ -1427,10 +1509,12 @@ function logDeviceInfo(data) {
     log(`Device: ${deviceInfoStr}`, 'success');
     
     // Extract version from string (e.g., "F4HWN v4.3.3" -> "4.3.3")
-    const versionMatch = deviceInfoStr.match(/v(\d+\.\d+\.\d+)/);
+    const versionMatch = deviceInfoStr.match(/(?:^|\s)v?(\d+)\.(\d+)\.(\d+)/i);
     if (versionMatch) {
-      const version = versionMatch[1];
-      const [major, minor, patch] = version.split('.').map(Number);
+      const major = Number(versionMatch[1]);
+      const minor = Number(versionMatch[2]);
+      const patch = Number(versionMatch[3]);
+      const version = `${major}.${minor}.${patch}`;
       
       // Set CALIB_OFFSET based on version
       if (major >= 5) {
@@ -1440,6 +1524,8 @@ function logDeviceInfo(data) {
         CALIB_OFFSET = 0x1E00;
         log(`Firmware v${version} detected: CALIB_OFFSET = 0x1E00`, 'info');
       }
+    } else {
+      log('Could not parse firmware version from device info, keeping current calibration offset.', 'info');
     }
   } else {
     // Fallback to hex dump if no ASCII found
