@@ -26,4 +26,4 @@ jobs:
           gem install html-proofer
           npx -y serve _site &
           sleep 5
-          htmlproofer ./_site --check-html --check-img-http --allow-hash-href --disable-external
+          htmlproofer ./_site --checks Links,Images,Scripts --allow-hash-href --disable-external
