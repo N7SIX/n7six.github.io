@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Static site for n7six.github.io",
   "scripts": {
-    "lint:js": "eslint js/",
+    "lint:js": "eslint UVTools/js/*.js",
     "lint:css": "stylelint 'css/**/*.css' 'sass/**/*.scss'",
     "format": "prettier --write ."
   },

@@ -44,10 +44,12 @@ const LEGACY_FW_XOR_TBL = new Uint8Array([
 
 // Calibration memory layout
 const CALIB_SIZE = 512; // bytes
-const CHUNK_SIZE = 16;
+const CHUNK_SIZE = 64;
 let CALIB_OFFSET = 0x1E00; // Default for firmware < v5.0.0
 const SERIAL_RESPONSE_TIMEOUT_MS = 30000;
 const DEVICE_INFO_TIMEOUT_MS = 30000;
+const EEPROM_READ_MAX_RETRIES = 3;
+const EEPROM_CHUNK_FALLBACKS = [64, 32, 16];
 
 // ========== STATE ==========
 let port = null;
@@ -499,7 +501,6 @@ if (calibFileInput) {
 
 function updateRestoreButton() {
   if (!restoreBtn) return;
-  const profile = getSelectedProfile();
   restoreBtn.disabled = !calibData || isRestoring;
 }
 
@@ -533,16 +534,16 @@ async function disconnect() {
   failPendingMessageWaiters(new Error('Serial disconnected'));
   isReading = false;
   if (reader) {
-    try { await reader.cancel(); } catch {}
-    try { reader.releaseLock(); } catch {}
+    try { await reader.cancel(); } catch (e) { /* no-op */ }
+    try { reader.releaseLock(); } catch (e) { /* no-op */ }
     reader = null;
   }
   if (writer) {
-    try { await writer.close(); } catch {}
+    try { await writer.close(); } catch (e) { /* no-op */ }
     writer = null;
   }
   if (port) {
-    try { await port.close(); } catch {}
+    try { await port.close(); } catch (e) { /* no-op */ }
     port = null;
   }
   log(t('disconnected'), 'info');
@@ -649,10 +650,10 @@ function fetchMessage(buf) {
 }
 
 function processReadBuffer() {
-  while (true) {
-    const msg = fetchMessage(readBuffer);
-    if (!msg) break;
+  let msg = fetchMessage(readBuffer);
+  while (msg) {
     enqueueParsedMessage(msg);
+    msg = fetchMessage(readBuffer);
   }
 }
 
@@ -796,7 +797,7 @@ async function disconnectLegacyPort(legacyPort) {
   if (!legacyPort) return;
   try {
     await legacyPort.close();
-  } catch {}
+  } catch (e) { /* no-op */ }
   log(t('disconnected'), 'info');
 }
 
@@ -1087,7 +1088,7 @@ async function performHandshake(blVersion) {
   let acc = 0;
 
   while (acc < 3) {
-    const msg = await waitForMessage(m => m.msgType === MSG_NOTIFY_DEV_INFO, SERIAL_RESPONSE_TIMEOUT_MS);
+    await waitForMessage(m => m.msgType === MSG_NOTIFY_DEV_INFO, SERIAL_RESPONSE_TIMEOUT_MS);
     if (acc === 0) log(t('sendingBlVersion'), 'info');
 
     const blMsg = createMessage(MSG_NOTIFY_BL_VER, 4);
@@ -1239,37 +1240,70 @@ function getAlternateCalibOffset(offset) {
   return offset === 0xB000 ? 0x1E00 : 0xB000;
 }
 
-async function readEepromRegion(devInfo, startOffset, size, onProgress) {
-  const data = new Uint8Array(size);
-  let offset = startOffset;
+async function readEepromChunk(devInfo, offset, chunkSize) {
+  const msg = createMessage(MSG_READ_EEPROM, 8);
+  const view = new DataView(msg.buffer);
+  view.setUint16(4, offset, true);
+  view.setUint16(6, chunkSize, true);
+  view.setUint32(8, devInfo.timestamp, true);
+  await sendMessage(msg);
 
-  for (let i = 0; i < size; i += CHUNK_SIZE) {
-    if (onProgress) onProgress(Math.round((i / size) * 100));
+  const deadline = Date.now() + SERIAL_RESPONSE_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    const remaining = Math.max(1, deadline - Date.now());
+    const resp = await waitForMessage(m => m.msgType === MSG_READ_EEPROM_RESP, remaining);
+    if (!resp?.data || resp.data.length < 4) continue;
 
-    const msg = createMessage(MSG_READ_EEPROM, 8);
-    const view = new DataView(msg.buffer);
-    view.setUint16(4, offset, true);
-    view.setUint16(6, CHUNK_SIZE, true);
-    view.setUint32(8, devInfo.timestamp, true);
-    await sendMessage(msg);
+    const dv = new DataView(resp.data.buffer, resp.data.byteOffset, resp.data.byteLength);
+    const respOffset = dv.getUint16(0, true);
+    const respSize = resp.data[2];
 
-    let gotResponse = false;
-    const deadline = Date.now() + SERIAL_RESPONSE_TIMEOUT_MS;
-    while (Date.now() < deadline && !gotResponse) {
-      const remaining = Math.max(1, deadline - Date.now());
-      const resp = await waitForMessage(m => m.msgType === MSG_READ_EEPROM_RESP, remaining);
-      const dv = new DataView(resp.data.buffer);
-      const respOffset = dv.getUint16(0, true);
-      const respSize = resp.data[2];
-
-      if (respOffset === offset && respSize === CHUNK_SIZE) {
-        for (let j = 0; j < CHUNK_SIZE; j++) data[i + j] = resp.data[4 + j];
-        gotResponse = true;
-        offset += CHUNK_SIZE;
-      }
+    if (respOffset !== offset || respSize !== chunkSize) continue;
+    if (resp.data.length < 4 + respSize) {
+      throw new Error(`Invalid EEPROM response length at 0x${offset.toString(16)}`);
     }
 
-    if (!gotResponse) throw new Error(t('eepromError', offset.toString(16)));
+    return resp.data.slice(4, 4 + respSize);
+  }
+
+  throw new Error(t('eepromError', offset.toString(16)));
+}
+
+async function readEepromChunkWithRetry(devInfo, offset, requestedSize) {
+  const candidates = EEPROM_CHUNK_FALLBACKS.filter(size => size <= requestedSize);
+  for (const candidateSize of candidates) {
+    for (let attempt = 1; attempt <= EEPROM_READ_MAX_RETRIES; attempt++) {
+      try {
+        const data = await readEepromChunk(devInfo, offset, candidateSize);
+        if (candidateSize !== requestedSize) {
+          log(`EEPROM read fallback chunk ${candidateSize} bytes at 0x${offset.toString(16).toUpperCase()}`, 'info');
+        }
+        return data;
+      } catch (e) {
+        if (attempt === EEPROM_READ_MAX_RETRIES) {
+          log(`EEPROM read retry exhausted (size=${candidateSize}) at 0x${offset.toString(16).toUpperCase()}`, 'error');
+        }
+      }
+    }
+  }
+
+  throw new Error(t('eepromError', offset.toString(16)));
+}
+
+async function readEepromRegion(devInfo, startOffset, size, onProgress) {
+  const data = new Uint8Array(size);
+  let bytesRead = 0;
+  let offset = startOffset;
+
+  while (bytesRead < size) {
+    if (onProgress) onProgress(Math.round((bytesRead / size) * 100));
+    const remaining = size - bytesRead;
+    const requestSize = Math.min(CHUNK_SIZE, remaining);
+    const chunk = await readEepromChunkWithRetry(devInfo, offset, requestSize);
+
+    data.set(chunk, bytesRead);
+    bytesRead += chunk.length;
+    offset += chunk.length;
   }
 
   return data;
@@ -1279,7 +1313,6 @@ async function readEepromRegion(devInfo, startOffset, size, onProgress) {
 const dumpFullBtn = document.getElementById('dumpFullBtn');
 const dumpFullDownload = document.getElementById('dumpFullDownload');
 const dumpFullLink = document.getElementById('dumpFullLink');
-const downloadFullText = document.getElementById('downloadFullText');
 
 dumpBtn.addEventListener('click', async () => {
   if (isDumping) return;

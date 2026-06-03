@@ -21,7 +21,7 @@ Un click sur chaque image permet d'accéder à plus de détails visibles sur ma 
         {% for gallery in site.data.galleries %}
             {% for image in gallery.images %}
                 <a href="{{ image.astrobin }}">
-                  <img src="{{ gallery.imagefolder }}/{{ image.name }}.png" title="{{ image.name }}" />
+                                    <img src="{{ gallery.imagefolder }}/{{ image.name }}.png" title="{{ image.name }}" alt="{{ image.name }}" />
                 </a>
             {% endfor %}
         {% endfor %}
