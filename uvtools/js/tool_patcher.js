@@ -13,7 +13,7 @@ let rawVersion = null; // stores the raw version data for fwpack.js and qsflash.
 let rawFirmware = null; // stores the raw firmware data for qsflash.js
 
 const PROFILE_DEFAULT = 'k1k5-v3';
-const MODERN_FLASHER_PATH = '../UVTools/index.html';
+const MODERN_FLASHER_PATH = '../uvtools2/index.html';
 const LEGACY_I18N = {
     en: {
         radioFamilyLabel: 'Radio Family',

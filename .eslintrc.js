@@ -10,5 +10,15 @@ module.exports = {
         ecmaVersion: 12,
         sourceType: 'module'
     },
-    rules: {}
+    rules: {
+        'no-empty': ['error', { allowEmptyCatch: true }]
+    },
+    overrides: [
+        {
+            files: ['uvtools2/js/rf-log.js'],
+            env: {
+                node: true
+            }
+        }
+    ]
 };

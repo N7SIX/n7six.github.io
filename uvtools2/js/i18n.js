@@ -1,26 +1,21 @@
 // js/i18n.js
-// Very light i18n loader with JSON files (lazy-load per language).
+// Very light i18n loader using local JavaScript dictionaries.
 // Adds: window.i18nReady (Promise) and dispatches "i18n:ready" event.
-// If locale fetch fails, a friendly error is shown in #infoBox.
+// Works from file:// as well as HTTP and HTTPS.
 // All comments in English.
 
 (function () {
-  const DEFAULT_LANG = localStorage.getItem('uv-k5-flasher-lang') || 'en';
-  const supported = ['en', 'fr', 'zh']; // add other codes (it, es, de) when files exist
-  const LOCALE_VERSION = '20260502c';
+  const LANGUAGE_STORAGE_KEY = 'currentLanguage';
+  const LEGACY_LANGUAGE_STORAGE_KEY = 'uv-k5-flasher-lang';
+  const storedLanguage = localStorage.getItem(LANGUAGE_STORAGE_KEY);
+  const legacyLanguage = localStorage.getItem(LEGACY_LANGUAGE_STORAGE_KEY);
+  const DEFAULT_LANG = storedLanguage || legacyLanguage || 'en';
+  const supported = ['en', 'fr', 'it', 'es', 'de', 'pt', 'ru', 'pl', 'zh', 'nl'];
 
-  // Load a locale JSON file, throws on file:// or fetch errors
-  async function loadLocale(lang) {
-    // Guard against file:// origin which blocks fetch
-    if (location.protocol === 'file:') {
-      throw new Error(
-        'This page is opened via file://. Serve it over http://localhost or HTTPS so JSON fetch & Web Serial work.'
-      );
-    }
-
-    const res = await fetch(`./locales/${lang}.json?v=${LOCALE_VERSION}`, { cache: 'no-store' });
-    if (!res.ok) throw new Error(`Failed to load locale: ${lang}`);
-    return res.json();
+  function loadLocale(lang) {
+    const locale = window.UVTOOLS_LOCALES?.[lang];
+    if (!locale) throw new Error('Locale not available: ' + lang);
+    return locale;
   }
 
   const i18n = {
@@ -29,6 +24,10 @@
     // Initialize i18n: load default language, set selector, bind change handler
     async init() {
       await this.setLanguage(this.lang);
+      // Migrate the former UVTools2 preference to the key shared with K5Viewer.
+      if (!storedLanguage && legacyLanguage) {
+        localStorage.setItem(LANGUAGE_STORAGE_KEY, this.lang);
+      }
       const sel = document.getElementById('languageSelect');
       if (sel) sel.value = this.lang;
       this.bindSelector();
@@ -42,7 +41,9 @@
         const lang = e.target.value;
         try {
           await this.setLanguage(lang);
-          localStorage.setItem('uv-k5-flasher-lang', this.lang);
+          localStorage.setItem(LANGUAGE_STORAGE_KEY, this.lang);
+          // Keep older UVTools2 releases in sync during the transition.
+          localStorage.setItem(LEGACY_LANGUAGE_STORAGE_KEY, this.lang);
           // Let the app refresh texts
           if (window.updateUI) window.updateUI();
         } catch (err) {
@@ -59,7 +60,7 @@
     },
     async setLanguage(lang) {
       this.lang = supported.includes(lang) ? lang : 'en';
-      this.dict = await loadLocale(this.lang);
+      this.dict = loadLocale(this.lang);
       document.documentElement.lang = this.lang;
     }
   };
@@ -74,5 +75,18 @@
     if (el) el.innerHTML = `<strong>Error:</strong> ${err.message}`;
     // resolve anyway to avoid blocking app; UI will display keys if needed
     return Promise.resolve();
+  });
+
+  // Live-sync the language when another same-origin tab changes it, so open
+  // tabs update without a manual refresh.
+  window.addEventListener('storage', (e) => {
+    if (e.key !== LANGUAGE_STORAGE_KEY) return;
+    const lang = localStorage.getItem(LANGUAGE_STORAGE_KEY);
+    if (!lang || lang === i18n.lang) return;
+    i18n.setLanguage(lang).then(() => {
+      const sel = document.getElementById('languageSelect');
+      if (sel) sel.value = i18n.lang;
+      if (window.updateUI) window.updateUI();
+    });
   });
 })();

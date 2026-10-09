@@ -32,6 +32,8 @@ exclude:
   - node_modules
   - vendor
   - test
+  - uvstudio/tests
+  - uvtools2/tests
   - Gemfile
   - Gemfile.lock
   - package.json
