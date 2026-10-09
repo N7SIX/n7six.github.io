@@ -82,7 +82,7 @@
     }
 
     function applyBranding() {
-        document.title = `UV Studio v${version} by F4HWN`;
+        document.title = `UV Studio v${version} by F4HWN · Adopted by N7SIX`;
         if (versionLabel) versionLabel.textContent = `v${version}`;
         if (aboutVersion) aboutVersion.textContent = `v${version}`;
     }
