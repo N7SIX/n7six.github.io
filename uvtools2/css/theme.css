@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════
-   F4HWN web tools — shared design system (tokens + generic components).
+   N7SIX web tools — shared design system (tokens + generic components).
    This is a standalone copy: keep it identical across k5viewer / uvtools2
    so the tools stay visually aligned. Loaded BEFORE the app's own stylesheet:
        <link href="css/theme.css" rel="stylesheet">

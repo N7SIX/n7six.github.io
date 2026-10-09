@@ -1,4 +1,4 @@
-/* === UVTools2 — aligned with the shared F4HWN design system === */
+/* === UVTools2 — aligned with the shared N7SIX design system === */
 /* Tokens, reset, body base, .btn and select live in css/theme.css.
    This file only holds uvtools2-specific layout & components, all built
    on the shared tokens so light/dark themes stay consistent with k5viewer. */
@@ -32,7 +32,7 @@ body {
   margin-bottom: 10px;
 }
 
-/* Brand block — same treatment as k5viewer (name + "by F4HWN" author) */
+/* Brand block — same treatment as k5viewer (name + "by F4HWN · Adopted by N7SIX" author) */
 .brand {
   display: flex;
   align-items: center;

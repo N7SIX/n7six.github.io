@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════
-   Shared theme toggle — F4HWN web tools
+   Shared theme toggle — N7SIX web tools
    Manages data-theme on <body> and persists the choice under the
    "isDarkTheme" key, shared origin-wide so the light/dark preference
    follows the user across k5viewer, uvtools2, …
