@@ -51,9 +51,9 @@
 }
 
 #pane-tools .action-tab.btn.active {
-  border-color: #2563eb;
-  background: linear-gradient(160deg, #3b82f6 0%, #2563eb 100%);
-  box-shadow: 0 2px 6px rgba(37,99,235,0.3), inset 0 1px 0 rgba(255,255,255,0.2);
+  border-color: #4338ca;
+  background: linear-gradient(160deg, #4f46e5 0%, #4338ca 100%);
+  box-shadow: 0 2px 6px rgba(67,56,202,0.3), inset 0 1px 0 rgba(255,255,255,0.2);
   color: #fff;
 }
 
@@ -62,8 +62,8 @@
 }
 
 [data-theme="dark"] #pane-tools .action-tab.btn.active {
-  border-color: #3b82f6;
-  background: linear-gradient(135deg, #2563eb, #3b82f6);
+  border-color: #4f46e5;
+  background: linear-gradient(135deg, #4338ca, #4f46e5);
   color: #fff;
 }
 
@@ -155,13 +155,13 @@
 
 /* Small primary chip inside the file picker */
 #pane-tools .file-button {
-  background: linear-gradient(160deg, #3b82f6 0%, #2563eb 100%);
+  background: linear-gradient(160deg, #4f46e5 0%, #4338ca 100%);
   color: #fff;
   padding: 8px 16px;
   border-radius: 6px;
   font-size: 13px;
   font-weight: 600;
-  box-shadow: 0 2px 6px rgba(37,99,235,0.35), inset 0 1px 0 rgba(255,255,255,0.2);
+  box-shadow: 0 2px 6px rgba(67,56,202,0.35), inset 0 1px 0 rgba(255,255,255,0.2);
   white-space: nowrap;
 }
 
@@ -261,21 +261,21 @@
   margin: 10px 0 0;
   padding: 12px 28px;
   border-radius: var(--radius);
-  border: 1px solid #2563eb;
-  background: linear-gradient(160deg, #3b82f6 0%, #2563eb 100%);
+  border: 1px solid #4338ca;
+  background: linear-gradient(160deg, #4f46e5 0%, #4338ca 100%);
   color: #fff;
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s;
-  box-shadow: 0 2px 8px rgba(37,99,235,0.35), inset 0 1px 0 rgba(255,255,255,0.2);
+  box-shadow: 0 2px 8px rgba(67,56,202,0.35), inset 0 1px 0 rgba(255,255,255,0.2);
 }
 
 #pane-tools button:not(.log-toggle):not(.btn):hover:not(:disabled) {
-  background: linear-gradient(160deg, #60a5fa 0%, #3b82f6 100%);
-  border-color: #3b82f6;
+  background: linear-gradient(160deg, #6366f1 0%, #4f46e5 100%);
+  border-color: #4f46e5;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(37,99,235,0.45), inset 0 1px 0 rgba(255,255,255,0.25);
+  box-shadow: 0 4px 12px rgba(67,56,202,0.45), inset 0 1px 0 rgba(255,255,255,0.25);
 }
 
 #pane-tools button:not(.log-toggle):not(.btn):active:not(:disabled) {
@@ -290,12 +290,12 @@
 }
 
 [data-theme="dark"] #pane-tools button:not(.log-toggle):not(.btn) {
-  background: linear-gradient(135deg, #2563eb, #3b82f6);
-  box-shadow: 0 2px 8px rgba(59,130,246,0.4), inset 0 1px 0 rgba(255,255,255,0.15);
+  background: linear-gradient(135deg, #4338ca, #4f46e5);
+  box-shadow: 0 2px 8px rgba(99,102,241,0.4), inset 0 1px 0 rgba(255,255,255,0.15);
 }
 [data-theme="dark"] #pane-tools button:not(.log-toggle):not(.btn):hover:not(:disabled) {
-  background: linear-gradient(135deg, #3b82f6, #60a5fa);
-  box-shadow: 0 4px 12px rgba(59,130,246,0.5), inset 0 1px 0 rgba(255,255,255,0.2);
+  background: linear-gradient(135deg, #4f46e5, #6366f1);
+  box-shadow: 0 4px 12px rgba(99,102,241,0.5), inset 0 1px 0 rgba(255,255,255,0.2);
 }
 
 /* Focus: no halo — the select's border turns blue on focus (via core.css),
@@ -318,7 +318,7 @@
 
 #pane-tools .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #60a5fa 0%, #3b82f6 50%, #2563eb 100%);
+  background: linear-gradient(90deg, #6366f1 0%, #4f46e5 50%, #4338ca 100%);
   width: 0%;
   transition: width 0.3s;
 }
@@ -660,7 +660,7 @@
 }
 [data-theme="dark"] #pane-tools .slots-table button.app-update-button,
 [data-theme="dark"] #pane-tools .slots-table button.slot-update-button {
-  color: #60a5fa;
+  color: #6366f1;
   background: transparent;
   box-shadow: none;
 }
@@ -674,7 +674,7 @@
 }
 [data-theme="dark"] #pane-tools .slots-table button.app-update-button:hover:not(:disabled),
 [data-theme="dark"] #pane-tools .slots-table button.slot-update-button:hover:not(:disabled) {
-  color: #93c5fd;
+  color: #a5b4fc;
 }
 #pane-tools .slots-table .app-update-button[hidden],
 #pane-tools .slots-table .slot-update-button[hidden] {

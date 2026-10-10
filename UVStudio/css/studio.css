@@ -26,8 +26,8 @@ body {
 .sb-brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
 .logo-mark {
     display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px;
-    background: linear-gradient(150deg, #3b82f6, #2563eb); color: #fff; flex: 0 0 auto;
-    box-shadow: 0 2px 8px rgba(37,99,235,0.4), inset 0 1px 0 rgba(255,255,255,0.25);
+    background: linear-gradient(150deg, #4f46e5, #4338ca); color: #fff; flex: 0 0 auto;
+    box-shadow: 0 2px 8px rgba(67,56,202,0.4), inset 0 1px 0 rgba(255,255,255,0.25);
 }
 .logo-mark svg { width: 24px; height: 24px; }
 .sb-title { display: flex; flex-direction: column; line-height: 1.15; }
@@ -170,11 +170,11 @@ body {
 }
 .nav-item.active:disabled { opacity: 0.82; }
 .nav-item.active {
-    background: linear-gradient(160deg, #3b82f6 0%, #2563eb 100%); color: #fff;
-    box-shadow: 0 2px 8px rgba(37,99,235,0.35), inset 0 1px 0 rgba(255,255,255,0.2);
+    background: linear-gradient(160deg, #4f46e5 0%, #4338ca 100%); color: #fff;
+    box-shadow: 0 2px 8px rgba(67,56,202,0.35), inset 0 1px 0 rgba(255,255,255,0.2);
 }
 .nav-item.active .tag { background: rgba(255,255,255,0.22); color: #fff; }
-[data-theme="dark"] .nav-item.active { background: linear-gradient(135deg, #2563eb, #3b82f6); }
+[data-theme="dark"] .nav-item.active { background: linear-gradient(135deg, #4338ca, #4f46e5); }
 .sidebar-foot {
     margin-top: 0; padding: 12px 12px 4px; border-top: 1px solid var(--border);
     font-size: 11px; color: var(--text-muted);
@@ -395,8 +395,8 @@ body {
 }
 .about-mark {
     display: grid; place-items: center; width: 64px; height: 64px; border-radius: 18px;
-    color: #fff; background: linear-gradient(150deg, #3b82f6, #2563eb);
-    box-shadow: 0 8px 22px rgba(37,99,235,0.28), inset 0 1px 0 rgba(255,255,255,0.24);
+    color: #fff; background: linear-gradient(150deg, #4f46e5, #4338ca);
+    box-shadow: 0 8px 22px rgba(67,56,202,0.28), inset 0 1px 0 rgba(255,255,255,0.24);
 }
 .about-mark svg { width: 34px; height: 34px; }
 .about-heading { align-self: center; min-width: 0; }
