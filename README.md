@@ -41,7 +41,7 @@ npx mocha test/*.test.js
 Run the UV Studio and UVTools2 tests:
 
 ```sh
-node --test uvstudio/tests/*.test.js uvtools2/tests/*.test.js
+node --test UVStudio/tests/*.test.js uvtools2/tests/*.test.js
 ```
 
 ## Build for Production
@@ -53,8 +53,9 @@ JEKYLL_ENV=production bundle exec jekyll build --config _config.yml,_config.prod
 ## Deployment
 
 Deploys automatically via GitHub Actions to GitHub Pages on push to `main`.
-UV Studio is published at `/uvstudio/`, with the standalone flasher at
-`/uvtools2/`. The former `/UVTools/` address redirects to UVTools2.
+UV Studio is published at `/UVStudio/`, with the standalone flasher at
+`/uvtools2/`. The former `/UVTools/` address redirects to UVTools2, and the
+former `/uvstudio/` address redirects to UV Studio at `/UVStudio/`.
 
 ## Updating Dependencies
 
@@ -67,7 +68,7 @@ UV Studio is published at `/uvstudio/`, with the standalone flasher at
 - `_layouts/` — Jekyll layouts
 - `css/`, `js/`, `images/` — Static assets
 - `test/` — JS tests
-- `uvstudio/` — Unified radio viewer and firmware tools
+- `UVStudio/` — Unified radio viewer and firmware tools
 - `uvtools2/` — Standalone firmware flasher and maintenance tools
 
 ## Security & Best Practices

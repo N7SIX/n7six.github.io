@@ -32,7 +32,7 @@ exclude:
   - node_modules
   - vendor
   - test
-  - uvstudio/tests
+  - UVStudio/tests
   - uvtools2/tests
   - Gemfile
   - Gemfile.lock

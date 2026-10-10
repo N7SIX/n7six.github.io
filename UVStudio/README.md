@@ -6,7 +6,7 @@ K5Viewer with the firmware and maintenance tools of UVTools2 in one interface.
 Communication with the radio is performed directly through the Web Serial API.
 No installation, server, dependency, or build step is required.
 
-[Open UV Studio](https://armel.github.io/uvstudio/)
+[Open UV Studio](https://n7six.github.io/UVStudio/)
 
 ## Features
 

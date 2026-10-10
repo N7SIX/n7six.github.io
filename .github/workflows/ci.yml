@@ -28,4 +28,4 @@ jobs:
           npm install --save-dev mocha
           npx mocha test/*.test.js
       - name: Test UV applications
-        run: node --test uvstudio/tests/*.test.js uvtools2/tests/*.test.js
+        run: node --test UVStudio/tests/*.test.js uvtools2/tests/*.test.js
