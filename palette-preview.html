@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>UV Studio — Palette Preview</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: #0b1120; color: #e2e8f0; line-height: 1.5; padding: 32px 20px 64px;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.01em; }
+  .lede { color: #94a3b8; font-size: 14px; margin: 6px 0 28px; max-width: 720px; }
+  .pal { margin-bottom: 36px; border: 1px solid #263041; border-radius: 14px; overflow: hidden; }
+  .pal-head { padding: 16px 20px; background: #131c2b; border-bottom: 1px solid #263041; }
+  .pal-head h2 { font-size: 17px; font-weight: 700; }
+  .pal-head p { color: #94a3b8; font-size: 13px; margin-top: 2px; }
+  .themes { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+  @media (max-width: 860px) { .themes { grid-template-columns: 1fr; } }
+  .theme { padding: 20px; }
+  .theme + .theme { border-left: 1px solid #263041; }
+  @media (max-width: 860px) { .theme + .theme { border-left: none; border-top: 1px solid #263041; } }
+  .theme-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.6; margin-bottom: 14px; }
+  /* the simulated app frame */
+  .frame { border-radius: 12px; overflow: hidden; border: 1px solid var(--border); }
+  .bar { display: flex; align-items: center; gap: 12px; height: 52px; padding: 0 16px; background: var(--surface); border-bottom: 1px solid var(--border); }
+  .logo { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 13px; background: linear-gradient(150deg, var(--accent), var(--accent-hover)); }
+  .bar-title { font-weight: 700; font-size: 14px; color: var(--text); }
+  .bar-title b { color: var(--accent); }
+  .bar-sub { font-size: 10px; color: var(--text-muted); }
+  .bar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; font-size: 11px; font-weight: 650; border: 1px solid var(--border); background: color-mix(in oklab, var(--text-muted) 8%, var(--surface)); color: var(--text-secondary); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); }
+  .shell { display: flex; min-height: 210px; background: var(--bg); }
+  .side { flex: 0 0 190px; padding: 14px 10px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 4px; }
+  .nav { padding: 8px 10px; border-radius: 7px; font-size: 12.5px; font-weight: 600; color: var(--text-secondary); }
+  .nav.active { background: linear-gradient(160deg, var(--accent), var(--accent-hover)); color: #fff; }
+  .grp { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); padding: 8px 10px 2px; }
+  .main { flex: 1; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .card h3 { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+  .card p { font-size: 12px; color: var(--text-secondary); }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 34px; padding: 0 14px; border-radius: 8px; font-size: 12.5px; font-weight: 650; cursor: default; border: 1px solid #94a3b8; background: linear-gradient(160deg, #f8fafc, #e2e8f0); color: #334155; box-shadow: 0 1px 2px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.8); }
+  .btn.primary { background: linear-gradient(160deg, var(--accent), var(--accent-hover)); border-color: var(--accent-hover); color: #fff; }
+  .btn.danger { background: linear-gradient(160deg, #f87171, var(--error)); border-color: var(--error); color: #fff; }
+  .status { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 650; padding: 5px 10px; border-radius: 999px; }
+  .st-ok { color: var(--success); border: 1px solid color-mix(in oklab, var(--success) 36%, var(--border)); background: color-mix(in oklab, var(--success) 9%, var(--surface)); }
+  .st-warn { color: #b45309; border: 1px solid color-mix(in oklab, #f59e0b 38%, var(--border)); background: color-mix(in oklab, #f59e0b 10%, var(--surface)); }
+  [data-mode="dark"] .st-warn { color: #fbbf24; }
+  .swatches { display: flex; gap: 6px; margin-top: 14px; flex-wrap: wrap; }
+  .sw { width: 46px; height: 34px; border-radius: 6px; border: 1px solid rgba(128,128,128,0.35); display: grid; place-items: end center; font-size: 8px; font-weight: 700; padding-bottom: 2px; }
+  .keys { display: flex; gap: 5px; flex-wrap: wrap; }
+  .key { width: 30px; height: 26px; border-radius: 5px; font-size: 11px; font-weight: 700; display: grid; place-items: center; border: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>UV Studio — Palette Preview</h1>
+  <p class="lede">Four candidate directions, each shown in <b>light</b> and <b>dark</b>. Every frame uses the same real UI components (topbar, sidebar, buttons, status pills, keypad accents) so you can judge how each palette actually feels. Pick your favorite and I'll apply it to the app.</p>
+  <div id="palettes"></div>
+</div>
+<script>
+const PALETTES = [
+  { id:'A', name:'Slate Graphite', desc:'Cool teal-steel accent, calm neutral grays. Reads like a professional IDE / dev-tool.',
+    light:{bg:'#f1f5f9',surface:'#ffffff',border:'#dbe2ea',text:'#0f172a',textSecondary:'#556070',textMuted:'#8a94a3',accent:'#0e7490',accentHover:'#155e75',success:'#047857',error:'#be123c'},
+    dark:{bg:'#0a0f1a',surface:'#131c2b',border:'#263041',text:'#e8edf3',textSecondary:'#97a3b4',textMuted:'#5f6b7d',accent:'#22d3ee',accentHover:'#67e8f9',success:'#34d399',error:'#fb7185'} },
+  { id:'B', name:'Warm Professional', desc:'Warm off-white canvas, warm-gray text, refined bronze/amber accent. Premium, breaks the cold-blue cliché.',
+    light:{bg:'#faf9f7',surface:'#ffffff',border:'#e7e3dd',text:'#1c1917',textSecondary:'#57534e',textMuted:'#a8a29e',accent:'#b45309',accentHover:'#92400e',success:'#15803d',error:'#b91c1c'},
+    dark:{bg:'#1c1917',surface:'#292524',border:'#44403c',text:'#f5f5f4',textSecondary:'#a8a29e',textMuted:'#78716c',accent:'#fbbf24',accentHover:'#fcd34d',success:'#4ade80',error:'#f87171'} },
+  { id:'C', name:'Deep Emerald', desc:'Faint green-tinted canvas, near-black text, emerald accent. Strong, confident, instrument-panel feel.',
+    light:{bg:'#f0fdf4',surface:'#ffffff',border:'#d1f0dd',text:'#052e1a',textSecondary:'#3f6212',textMuted:'#84a98c',accent:'#047857',accentHover:'#065f46',success:'#15803d',error:'#b91c1c'},
+    dark:{bg:'#04120b',surface:'#0d2016',border:'#1c3a28',text:'#dcfce7',textSecondary:'#86efac',textMuted:'#4d7c5f',accent:'#34d399',accentHover:'#6ee7b7',success:'#4ade80',error:'#fb7185'} },
+  { id:'D', name:'Violet Studio', desc:'Soft lavender canvas, deep indigo text, vivid violet accent. Distinctive and contemporary.',
+    light:{bg:'#f5f3ff',surface:'#ffffff',border:'#e0dbff',text:'#1e1b4b',textSecondary:'#4c4567',textMuted:'#9d96b8',accent:'#6d28d9',accentHover:'#5b21b6',success:'#047857',error:'#be123c'},
+    dark:{bg:'#0f0a1e',surface:'#1a1330',border:'#322a52',text:'#ede9fe',textSecondary:'#a78bfa',textMuted:'#6d6390',accent:'#a78bfa',accentHover:'#c4b5fd',success:'#34d399',error:'#fb7185'} }
+];
+function vars(t){ return `--bg:${t.bg};--surface:${t.surface};--border:${t.border};--text:${t.text};--text-secondary:${t.textSecondary};--text-muted:${t.textMuted};--accent:${t.accent};--accent-hover:${t.accentHover};--success:${t.success};--error:${t.error};`; }
+function warnInk(mode){ return mode==='dark' ? '#fbbf24' : '#b45309'; }
+function warnDot(mode){ return mode==='dark' ? '#fbbf24' : '#f59e0b'; }
+function frame(mode, t){
+  const neutralBtn = mode==='dark'
+    ? 'style="background:linear-gradient(160deg,#2e3d50,#1e2d3d);border-color:#3a4d62;color:#cbd5e1;"'
+    : '';
+  const key = `color:${t.accent};border-color:color-mix(in oklab,${t.accent} 40%,${t.border});background:color-mix(in oklab,${t.accent} ${mode==='dark'?10:8}%,${t.surface});`;
+  return `
+  <div class="frame">
+    <div class="bar"><div class="logo">UV</div><div><div class="bar-title">UV <b>Studio</b></div><div class="bar-sub">v7.6.0</div></div>
+      <div class="bar-right"><span class="pill"><span class="dot"></span>Connected</span></div></div>
+    <div class="shell">
+      <div class="side">
+        <div class="grp">Viewer</div><div class="nav active">Live Viewer</div><div class="nav">RF Log</div>
+        <div class="grp">Tools</div><div class="nav">Flash Firmware</div><div class="nav">Calibration</div><div class="nav">Boot Logo</div>
+      </div>
+      <div class="main">
+        <div class="card"><h3>Firmware</h3><p>Official F4HWN firmware — select a version to flash.</p>
+          <div class="row" style="margin-top:10px;">
+            <span class="btn primary">Flash firmware</span>
+            <span class="btn" ${neutralBtn}>Download driver</span>
+            <span class="btn danger">Erase</span>
+          </div>
+        </div>
+        <div class="row">
+          <span class="status st-ok"><span class="dot"></span>Ready</span>
+          <span class="status st-warn" style="color:${warnInk(mode)};"><span class="dot" style="background:${warnDot(mode)};"></span>Critical op</span>
+        </div>
+        <div class="keys">
+          <span class="key" style="${key}">F1</span>
+          <span class="key" style="${key}">F2</span>
+          <span class="key">MENU</span><span class="key">EXIT</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="swatches">
+    <div class="sw" style="background:${t.bg};color:${t.text};">bg</div>
+    <div class="sw" style="background:${t.surface};color:${t.text};">surface</div>
+    <div class="sw" style="background:${t.accent};color:${mode==='dark'?t.bg:'#fff'};">accent</div>
+    <div class="sw" style="background:${t.success};color:${mode==='dark'?t.bg:'#fff'};">ok</div>
+    <div class="sw" style="background:${t.error};color:${mode==='dark'?t.bg:'#fff'};">err</div>
+  </div>`;
+}
+function themeCol(mode, t){ return `<div class="theme" data-mode="${mode}" style="${vars(t)}"><div class="theme-label">${mode==='light'?'Light':'Dark'}</div>${frame(mode,t)}</div>`; }
+document.getElementById('palettes').innerHTML = PALETTES.map(p => `
+  <section class="pal">
+    <div class="pal-head"><h2>${p.id} — ${p.name}</h2><p>${p.desc}</p></div>
+    <div class="themes">${themeCol('light',p.light)}${themeCol('dark',p.dark)}</div>
+  </section>`).join('');
+</script>
+</body>
+</html>
+
