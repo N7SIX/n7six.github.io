@@ -17,16 +17,109 @@ const flashSource = fs.readFileSync(path.join(root, 'js', 'flash.js'), 'utf8');
 const studioCss = fs.readFileSync(path.join(root, 'css', 'studio.css'), 'utf8');
 const toolsCss = fs.readFileSync(path.join(root, 'css', 'tools.css'), 'utf8');
 
-test('derives any multiboot edition from the canonical firmware filename', () => {
-  const start = flashSource.indexOf('function slotEditionFromFilename');
-  const end = flashSource.indexOf(
-    '\n\nfunction slotVersionFromFilename',
-    start,
+// Extract indented (possibly async) function sources without depending on
+// exact blank-line formatting. Prettier may re-indent bodies, so match the
+// leading indentation of the declaration and capture until the matching
+// closing brace at that same indentation.
+function sliceFunction(source, name, { async = false } = {}) {
+  const pattern = new RegExp(
+    `(^|\\n)(?<indent>[ \\t]*)(?:async\\s+)?function\\s+${name}\\s*\\(`,
   );
-  assert.ok(start >= 0 && end > start);
+  const match = pattern.exec(source);
+  assert.ok(match, `flash.js must define ${name}()`);
+  const indent = match.groups.indent;
+  const declStart = match.index + match[1].length;
+  const bodyOpen = source.indexOf('{', declStart);
+  assert.ok(bodyOpen > declStart, `${name}() must have a body`);
+  // Walk braces from the opening brace; strings/comments are simple enough
+  // in these helpers that a raw scan is sufficient for tests.
+  let depth = 0;
+  let inSingle = false;
+  let inDouble = false;
+  let inTemplate = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+  let escaped = false;
+  for (let i = bodyOpen; i < source.length; i++) {
+    const ch = source[i];
+    const next = source[i + 1];
+    if (inLineComment) {
+      if (ch === '\n') inLineComment = false;
+      continue;
+    }
+    if (inBlockComment) {
+      if (ch === '*' && next === '/') {
+        inBlockComment = false;
+        i++;
+      }
+      continue;
+    }
+    if (inSingle) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === "'") inSingle = false;
+      continue;
+    }
+    if (inDouble) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inDouble = false;
+      continue;
+    }
+    if (inTemplate) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '`') inTemplate = false;
+      continue;
+    }
+    if (ch === '/' && next === '/') {
+      inLineComment = true;
+      i++;
+      continue;
+    }
+    if (ch === '/' && next === '*') {
+      inBlockComment = true;
+      i++;
+      continue;
+    }
+    if (ch === "'") {
+      inSingle = true;
+      continue;
+    }
+    if (ch === '"') {
+      inDouble = true;
+      continue;
+    }
+    if (ch === '`') {
+      inTemplate = true;
+      continue;
+    }
+    if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) {
+        return source.slice(declStart, i + 1);
+      }
+    }
+  }
+  assert.fail(`${name}(): unterminated function body`);
+  return '';
+}
+
+function sliceFunctions(source, names) {
+  return names.map((name) => sliceFunction(source, name)).join('\n\n');
+}
+
+function sliceFunctionsAsync(source, names) {
+  // Async is only part of the declaration; the brace scanner is identical.
+  return sliceFunctions(source, names);
+}
+
+test('derives any multiboot edition from the canonical firmware filename', () => {
+  const fnSource = sliceFunction(flashSource, 'slotEditionFromFilename');
   const context = {};
   vm.runInNewContext(
-    `${flashSource.slice(start, end)}; this.extractEdition = slotEditionFromFilename;`,
+    `${fnSource}; this.extractEdition = slotEditionFromFilename;`,
     context,
   );
 
@@ -43,12 +136,14 @@ test('derives any multiboot edition from the canonical firmware filename', () =>
 });
 
 test('accepts compact and dotted versions in multiboot firmware metadata', () => {
-  const start = flashSource.indexOf('function slotEditionFromFilename');
-  const end = flashSource.indexOf('\n\nfunction slotBuildHeader', start);
-  assert.ok(start >= 0 && end > start);
+  const fnSource = sliceFunctions(flashSource, [
+    'slotEditionFromFilename',
+    'slotVersionFromFilename',
+    'slotExtractMeta',
+  ]);
   const context = {};
   vm.runInNewContext(
-    `${flashSource.slice(start, end)}; this.extractMeta = slotExtractMeta;`,
+    `${fnSource}; this.extractMeta = slotExtractMeta;`,
     context,
   );
 
@@ -81,16 +176,17 @@ test('accepts compact and dotted versions in multiboot firmware metadata', () =>
 });
 
 test('stores a custom display name in the multiboot header', () => {
-  const start = flashSource.indexOf('function slotNormalizeName');
-  const end = flashSource.indexOf('\n\nfunction slotParseHeader', start);
-  assert.ok(start >= 0 && end > start);
+  const fnSource = sliceFunctions(flashSource, [
+    'slotNormalizeName',
+    'slotBuildHeader',
+  ]);
   const context = {};
   vm.runInNewContext(
     `const SLOT_HDR_SIZE = 64;
      const SLOT_MAGIC = 0x31424D46;
      const SLOT_HDR_VERSION = 1;
      const SLOT_FLAG_COMMITTED = 1;
-     ${flashSource.slice(start, end)};
+     ${fnSource};
      this.normalizeName = slotNormalizeName;
      this.buildHeader = slotBuildHeader;`,
     context,
@@ -118,7 +214,7 @@ test('offers the custom slot name before writing', () => {
 
 test('keeps the public version and its cache key aligned', () => {
   const version = studioVersionSource.match(
-    /UVSTUDIO_VERSION = "([^"]+)"/,
+    /UVSTUDIO_VERSION\s*=\s*["']([^"']+)["']/,
   )?.[1];
   assert.ok(version);
   assert.match(
@@ -202,12 +298,13 @@ test('offers one-click updates for outdated multiboot firmware slots', () => {
 });
 
 test('marks an installed app only when the catalog has a newer version', () => {
-  const start = flashSource.indexOf('function appVersionParts');
-  const end = flashSource.indexOf('\n\nfunction appCatalogKey', start);
-  assert.ok(start >= 0 && end > start);
+  const fnSource = sliceFunctions(flashSource, [
+    'appVersionParts',
+    'appCompareVersions',
+  ]);
   const context = {};
   vm.runInNewContext(
-    `${flashSource.slice(start, end)}; this.compare = appCompareVersions;`,
+    `${fnSource}; this.compare = appCompareVersions;`,
     context,
   );
 
@@ -235,12 +332,10 @@ test('marks an installed app only when the catalog has a newer version', () => {
 });
 
 test('checks installed apps against the detected Labs catalog', () => {
-  const start = flashSource.indexOf('function appFirmwareVersionFromName');
-  const end = flashSource.indexOf('\n\nconst appFileInput', start);
-  assert.ok(start >= 0 && end > start);
+  const fnSource = sliceFunction(flashSource, 'appFirmwareVersionFromName');
   const context = {};
   vm.runInNewContext(
-    `${flashSource.slice(start, end)}; this.extract = appFirmwareVersionFromName;`,
+    `${fnSource}; this.extract = appFirmwareVersionFromName;`,
     context,
   );
 
@@ -254,9 +349,7 @@ test('checks installed apps against the detected Labs catalog', () => {
 });
 
 test('downloads a catalog app and forwards its filename to the installer', async () => {
-  const start = flashSource.indexOf('async function loadAppFromURL');
-  const end = flashSource.indexOf('\n\nif (appFileInput)', start);
-  assert.ok(start >= 0 && end > start);
+  const fnSource = sliceFunction(flashSource, 'loadAppFromURL');
   const expected = Uint8Array.from([0x46, 0x41, 0x50, 0x31]);
   const loaded = {};
   const context = {
@@ -284,10 +377,7 @@ test('downloads a catalog app and forwards its filename to the installer', async
     log() {},
     t: (key) => key,
   };
-  vm.runInNewContext(
-    `${flashSource.slice(start, end)}; this.load = loadAppFromURL;`,
-    context,
-  );
+  vm.runInNewContext(`${fnSource}; this.load = loadAppFromURL;`, context);
 
   const loadedOk = await context.load(
     'https://example.test/archive/apps/v6.0.0/Beacon.app',
@@ -310,9 +400,13 @@ test('loads resilient preferences before i18n and application consumers', () => 
 
 test('keeps live-view-only controls out of the RF Log toolbar', () => {
   ['keyboardToggleBtn', 'keyboardDetachBtn', 'helpBtn'].forEach((id) => {
+    // Prettier puts class and id on separate lines; allow any attrs between.
     assert.match(
       html,
-      new RegExp(`class="[^"]*viewer-live-only[^"]*" id="${id}"`),
+      new RegExp(
+        `<button[^>]*class="[^"]*viewer-live-only[^"]*"[^>]*id="${id}"|` +
+          `<button[^>]*id="${id}"[^>]*class="[^"]*viewer-live-only[^"]*"`,
+      ),
     );
   });
   assert.match(html, /id="pane-viewer" data-viewer-mode="live"/);
@@ -373,15 +467,15 @@ test('keeps Labs-only tools together in the sidebar', () => {
   );
   assert.match(
     html,
-    /class="nav-item nav-item-labs" data-route="apps"[^>]+data-name="Apps \(Labs only\)"/,
+    /class="nav-item nav-item-labs"[\s\S]+?data-route="apps"[\s\S]+?data-name="Apps \(Labs only\)"/,
   );
   assert.match(
     html,
-    /class="nav-item nav-item-labs" data-route="external-flash"[^>]+data-name="External Flash \(Labs only\)"/,
+    /class="nav-item nav-item-labs"[\s\S]+?data-route="external-flash"[\s\S]+?data-name="External Flash \(Labs only\)"/,
   );
   assert.match(
     html,
-    /class="nav-item nav-item-labs" data-route="factory-reset"[^>]+data-name="Factory Reset \(Labs only\)"/,
+    /class="nav-item nav-item-labs"[\s\S]+?data-route="factory-reset"[\s\S]+?data-name="Factory Reset \(Labs only\)"/,
   );
   assert.equal(
     (html.match(/class="tag" data-i18n="studio_nav_labs_only"/g) || []).length,
@@ -393,7 +487,10 @@ test('keeps Labs-only tools together in the sidebar', () => {
 });
 
 test('orders logo actions from radio read to radio write', () => {
-  assert.match(html, /data-tool-view="logo" data-default-action="download"/);
+  assert.match(
+    html,
+    /data-tool-view="logo"[\s\S]+?data-default-action="download"/,
+  );
   const start = html.indexOf('id="logo-content"');
   const end = html.indexOf('id="external-flash-content"', start);
   const routes = [
@@ -420,15 +517,11 @@ test('keeps generated-file downloads beside their read actions', () => {
 });
 
 test('keeps full external flash transfers responsive and retryable', () => {
-  const start = flashSource.indexOf(
-    'async function waitForExternalFlashResponse',
-  );
-  const end = flashSource.indexOf(
-    '\n\n// Labs-only gate for External Flash',
-    start,
-  );
-  assert.ok(start >= 0 && end > start);
-  const helpers = flashSource.slice(start, end);
+  const fnSource = sliceFunctionsAsync(flashSource, [
+    'waitForExternalFlashResponse',
+    'exchangeExternalFlashMessage',
+  ]);
+  const helpers = fnSource;
   assert.match(helpers, /await waitForSerialRead\(/);
   assert.doesNotMatch(helpers, /await sleep\(5\)/);
   assert.match(helpers, /retries = FLASH_COMMAND_RETRIES/);
@@ -438,11 +531,11 @@ test('keeps full external flash transfers responsive and retryable', () => {
 });
 
 test('uses sector CRC32 to skip matching flash and accelerate verification', () => {
-  assert.match(flashSource, /const MSG_CRC_FLASH = 0x073E/);
-  assert.match(flashSource, /const MSG_CRC_FLASH_RESP = 0x073F/);
+  assert.match(flashSource, /const MSG_CRC_FLASH = 0x073[eE]/);
+  assert.match(flashSource, /const MSG_CRC_FLASH_RESP = 0x073[fF]/);
   assert.match(
     flashSource,
-    /await detectExternalFlashCrcSupport\(devInfo\.timestamp\)/,
+    /await detectExternalFlashCrcSupport\(\s*devInfo\.timestamp,?/,
   );
   assert.match(
     flashSource,
@@ -450,14 +543,9 @@ test('uses sector CRC32 to skip matching flash and accelerate verification', () 
   );
   assert.match(flashSource, /await verifyExternalFlashSector\(/);
 
-  const start = flashSource.indexOf('function crc32Bytes');
-  const end = flashSource.indexOf('\n}', start) + 2;
-  assert.ok(start >= 0 && end > start);
+  const fnSource = sliceFunction(flashSource, 'crc32Bytes');
   const context = { Uint8Array };
-  vm.runInNewContext(
-    `${flashSource.slice(start, end)}; this.crc32 = crc32Bytes;`,
-    context,
-  );
+  vm.runInNewContext(`${fnSource}; this.crc32 = crc32Bytes;`, context);
   assert.equal(
     context.crc32(new Uint8Array(Buffer.from('123456789'))),
     0xcbf43926,
@@ -465,15 +553,19 @@ test('uses sector CRC32 to skip matching flash and accelerate verification', () 
 });
 
 test('uses the shared modal UI to confirm external flash restoration', () => {
+  // Prettier breaks attributes across lines; match across newlines.
   assert.match(
     html,
-    /id="flashRestoreConfirmModal"[^>]+role="dialog"[^>]+aria-modal="true"/,
+    /id="flashRestoreConfirmModal"[\s\S]+?role="dialog"[\s\S]+?aria-modal="true"/,
   );
   assert.match(
     html,
-    /id="flashRestoreCancelBtn"[^>]+data-i18n="flashRestoreCancel"/,
+    /id="flashRestoreCancelBtn"[\s\S]+?data-i18n="flashRestoreCancel"/,
   );
-  assert.match(html, /class="btn danger" id="flashRestoreConfirmBtn"/);
+  assert.match(
+    html,
+    /class="btn danger"[\s\S]+?id="flashRestoreConfirmBtn"|id="flashRestoreConfirmBtn"[\s\S]+?class="btn danger"/,
+  );
   assert.match(flashSource, /await confirmExternalFlashRestore\(\)/);
   assert.doesNotMatch(
     flashSource,
@@ -484,30 +576,33 @@ test('uses the shared modal UI to confirm external flash restoration', () => {
 test('provides verified two-stage factory restore workflows for UV-K1 and UV-K5 V3', () => {
   assert.match(
     html,
-    /class="nav-item nav-item-labs"[^>]+data-route="factory-reset"[^>]+data-tool-view="factory-reset"/,
+    /class="nav-item nav-item-labs"[\s\S]+?data-route="factory-reset"[\s\S]+?data-tool-view="factory-reset"/,
   );
   assert.match(
     html,
     /data-section-i18n="studio_nav_factory_reset"[\s\S]+data-i18n="studio_nav_labs_only"/,
   );
-  assert.match(html, /id="factory-reset-content"[^>]+role="region"/);
+  assert.match(
+    html,
+    /id="factory-reset-content"[\s\S]+?role="region"|role="region"[\s\S]+?id="factory-reset-content"/,
+  );
   assert.doesNotMatch(html, /id="factory-reset-tab"/);
   assert.match(html, /class="factory-reset-actions"/);
   assert.match(
     html,
-    /id="factoryResetK1Btn"[^>]+data-factory-reset-target="k1"/,
+    /id="factoryResetK1Btn"[\s\S]+?data-factory-reset-target="k1"/,
   );
   assert.match(
     html,
-    /id="factoryResetK5V3Btn"[^>]+data-factory-reset-target="k5v3"/,
+    /id="factoryResetK5V3Btn"[\s\S]+?data-factory-reset-target="k5v3"/,
   );
   assert.match(
     html,
-    /id="factoryResetModal"[^>]+role="dialog"[^>]+aria-modal="true"/,
+    /id="factoryResetModal"[\s\S]+?role="dialog"[\s\S]+?aria-modal="true"/,
   );
   assert.match(
     flashSource,
-    /factoryResetButtons\.forEach\(button => \{ button\.disabled = busy; \}\)/,
+    /factoryResetButtons\.forEach\(\(button\)\s*=>\s*\{\s*button\.disabled\s*=\s*busy;\s*\}\)/,
   );
   assert.match(flashSource, /showFactoryResetModal\('unsupported', target\)/);
   assert.match(flashSource, /const FACTORY_STATE_A = 0x100000/);
@@ -522,7 +617,7 @@ test('provides verified two-stage factory restore workflows for UV-K1 and UV-K5 
   );
   assert.match(
     flashSource,
-    /for \(let address = 0; address < FLASH_TOTAL_SIZE; address \+= FLASH_SECTOR_SIZE\)/,
+    /for \(\s*let address = 0;\s*address < FLASH_TOTAL_SIZE;\s*address \+= FLASH_SECTOR_SIZE\s*\)/,
   );
   assert.match(flashSource, /address === FLASH_CALIBRATION_SECTOR/);
   assert.match(
@@ -531,20 +626,20 @@ test('provides verified two-stage factory restore workflows for UV-K1 and UV-K5 
   );
   assert.match(
     flashSource,
-    /await restoreFactoryExternalFlash\(factoryFlash, devInfo\.timestamp, crcSupported\)/,
+    /await restoreFactoryExternalFlash\(\s*factoryFlash,\s*devInfo\.timestamp,\s*crcSupported,?\s*\)/,
   );
   assert.match(
     flashSource,
-    /fetchVerifiedBinary\(target\.flashUrl, FACTORY_FLASH_SIZE, target\.flashSha256\)/,
+    /fetchVerifiedBinary\(\s*target\.flashUrl,\s*FACTORY_FLASH_SIZE,\s*target\.flashSha256,?\s*\)/,
   );
   assert.match(
     flashSource,
-    /fetchVerifiedBinary\(target\.firmwareUrl, target\.firmwareSize, target\.firmwareSha256\)/,
+    /fetchVerifiedBinary\(\s*target\.firmwareUrl,\s*target\.firmwareSize,\s*target\.firmwareSha256,?\s*\)/,
   );
   assert.match(flashSource, /await showFactoryResetModal\('dfu'\)/);
   assert.match(
     flashSource,
-    /await flashFirmware\(stockFirmware, \{ count: false, offerChirpDriver: false \}\)/,
+    /await flashFirmware\(\s*stockFirmware,\s*\{\s*count:\s*false,\s*offerChirpDriver:\s*false,?\s*\}\s*\)/,
   );
   const factoryWorkflow = flashSource.slice(
     flashSource.indexOf('// ========== GUIDED FACTORY SOFTWARE RESTORE'),
@@ -702,14 +797,11 @@ test('provides an equivalent on-demand file protocol fallback', () => {
 });
 
 test('retries an external flash command after transient response timeouts', async () => {
-  const start = flashSource.indexOf(
-    'async function waitForExternalFlashResponse',
-  );
-  const end = flashSource.indexOf(
-    '\n\nasync function readExternalFlashChunk',
-    start,
-  );
-  assert.ok(start >= 0 && end > start);
+  const fnSource = sliceFunctionsAsync(flashSource, [
+    'waitForExternalFlashResponse',
+    'exchangeExternalFlashMessage',
+    'readExternalFlashChunk',
+  ]);
   const context = { Uint8Array, DataView, performance: { now: () => 0 } };
   vm.runInNewContext(
     `const FLASH_COMMAND_RETRIES = 3;
@@ -728,7 +820,7 @@ test('retries an external flash command after transient response timeouts', asyn
      }
      function fetchMessage(buffer) { return buffer.length ? buffer.shift() : null; }
      async function waitForSerialRead() { return false; }
-     ${flashSource.slice(start, end)};
+     ${fnSource};
      this.exchange = () => exchangeExternalFlashMessage(
        new Uint8Array(), 0x0739, 0x1234, 2000
      );
@@ -940,12 +1032,20 @@ test('translates radio help and exposes every global serial status label', () =>
 });
 
 function loadToolsHardwareDisconnect(state) {
-  const start = flashSource.indexOf('let toolsHardwareDisconnectPromise');
-  const end = flashSource.indexOf(
-    '\n\nfunction scheduleSlotReconnectProbe',
-    start,
-  );
-  assert.ok(start >= 0 && end > start);
+  // handleToolsHardwareDisconnect closes over module-level lets; provide the
+  // full closure surface the extracted functions touch.
+  const fnSource = sliceFunctions(flashSource, [
+    'handleToolsHardwareDisconnect',
+    'scheduleSlotReconnectProbe',
+  ]);
+  const preamble = [
+    'let toolsHardwareDisconnectPromise = null;',
+    'let slotReconnectTimer = null;',
+    'let slotAutoReconnecting = false;',
+    'let slotLastPortInfo = null;',
+    'let slotReconnectInProgress = false;',
+  ].join('\n');
+  const fullSource = `${preamble}\n${fnSource}`;
   const calls = [];
   const context = Object.assign(
     {
@@ -970,7 +1070,7 @@ function loadToolsHardwareDisconnect(state) {
     },
   };
   vm.runInNewContext(
-    `${flashSource.slice(start, end)}; this.run = handleToolsHardwareDisconnect;`,
+    `${fullSource}; this.run = handleToolsHardwareDisconnect;`,
     context,
   );
   return { run: context.run, calls };

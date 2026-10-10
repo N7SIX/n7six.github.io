@@ -63,103 +63,99 @@ function loadGlobal(relPath, extra = {}) {
   );
   vm.runInNewContext(js(relPath), context, { filename: relPath });
 
-  // ---------------------------------------------------------------------------
-  // rf-log.js — RF Log protocol + CSV (window.UVTOOLS_RF_LOG)
-  // ---------------------------------------------------------------------------
-  test('rf-log keeps its required protocol and CSV exports', () => {
-    const api = require(path.join(root, 'js', 'rf-log.js'));
-    for (const fn of [
-      'takeViewerFrame',
-      'parseMainPacket',
-      'parseHistoryPacket',
-      'mergeRows',
-      'limitVisibleRows',
-      'groupRowsBySession',
-      'countDistinctMemoryChannels',
-      'rowsToCsv',
-      'featureKeepalive',
-    ]) {
-      assert.equal(typeof api[fn], 'function', `rf-log must export ${fn}()`);
-    }
-    for (const constant of [
-      'TYPE_RF_LOG',
-      'TYPE_RF_LOG_HISTORY',
-      'ROW_COUNT',
-      'VISIBLE_TRAFFIC_COUNT',
-      'STATUS_PACKET_SIZE',
-      'PACKET_SIZE',
-      'HISTORY_PACKET_SIZE',
-      'POWER_LABELS',
-    ]) {
-      assert.ok(constant in api, `rf-log must export ${constant}`);
-    }
-  });
-
-  test('rf-log protocol constants stay internally consistent', () => {
-    const api = require(path.join(root, 'js', 'rf-log.js'));
-    // ROW_COUNT rows plus one live row, prefixed by the status packet.
-    assert.equal(
-      api.PACKET_SIZE,
-      api.STATUS_PACKET_SIZE + 25 * (api.ROW_COUNT + 1),
-    );
-    assert.equal(api.HISTORY_PACKET_SIZE, 25 * api.ROW_COUNT);
-    assert.equal(api.ROW_COUNT, 64);
-    assert.equal(api.VISIBLE_TRAFFIC_COUNT, 512);
-    assert.equal(api.STATUS_PACKET_SIZE, 4);
-    assert.equal(api.TYPE_RF_LOG, 0x05);
-    assert.equal(api.TYPE_RF_LOG_HISTORY, 0x06);
-  });
-
-  // ---------------------------------------------------------------------------
-  // flash-catalog.js — firmware parsing/grouping (window.UVStudioFlashCatalog)
-  // ---------------------------------------------------------------------------
-  test('flash-catalog keeps its required exports', () => {
-    const api = require(path.join(root, 'js', 'flash-catalog.js'));
-    for (const fn of [
-      'parseFirmwareName',
-      'compareVersionDesc',
-      'categorize',
-      'formatOptionLabel',
-      'hasSharedChirpDriver',
-      'isOffered',
-      'isSlotOffered',
-      'mergeCatalogFiles',
-    ]) {
-      assert.equal(
-        typeof api[fn],
-        'function',
-        `flash-catalog must export ${fn}()`,
-      );
-    }
-  });
-
-  // ---------------------------------------------------------------------------
-  // app-catalog.js — overlay-app discovery (window.UVStudioAppCatalog)
-  // ---------------------------------------------------------------------------
-  test('app-catalog keeps its required exports', () => {
-    const api = require(path.join(root, 'js', 'app-catalog.js'));
-    for (const fn of [
-      'boot',
-      'compareVersionsDesc',
-      'contentsURL',
-      'displayAppName',
-      'formatAppLabel',
-      'listApps',
-      'listVersions',
-      'parseAppHeader',
-      'parseVersionDirectory',
-      'readAppMetadata',
-    ]) {
-      assert.equal(
-        typeof api[fn],
-        'function',
-        `app-catalog must export ${fn}()`,
-      );
-    }
-  });
-
   return context;
 }
+
+// ---------------------------------------------------------------------------
+// rf-log.js — RF Log protocol + CSV (window.UVTOOLS_RF_LOG)
+// ---------------------------------------------------------------------------
+test('rf-log keeps its required protocol and CSV exports', () => {
+  const api = require(path.join(root, 'js', 'rf-log.js'));
+  for (const fn of [
+    'takeViewerFrame',
+    'parseMainPacket',
+    'parseHistoryPacket',
+    'mergeRows',
+    'limitVisibleRows',
+    'groupRowsBySession',
+    'countDistinctMemoryChannels',
+    'rowsToCsv',
+    'featureKeepalive',
+  ]) {
+    assert.equal(typeof api[fn], 'function', `rf-log must export ${fn}()`);
+  }
+  for (const constant of [
+    'TYPE_RF_LOG',
+    'TYPE_RF_LOG_HISTORY',
+    'ROW_COUNT',
+    'VISIBLE_TRAFFIC_COUNT',
+    'STATUS_PACKET_SIZE',
+    'PACKET_SIZE',
+    'HISTORY_PACKET_SIZE',
+    'POWER_LABELS',
+  ]) {
+    assert.ok(constant in api, `rf-log must export ${constant}`);
+  }
+});
+
+test('rf-log protocol constants stay internally consistent', () => {
+  const api = require(path.join(root, 'js', 'rf-log.js'));
+  // ROW_COUNT rows plus one live row, prefixed by the status packet.
+  assert.equal(
+    api.PACKET_SIZE,
+    api.STATUS_PACKET_SIZE + 25 * (api.ROW_COUNT + 1),
+  );
+  assert.equal(api.HISTORY_PACKET_SIZE, 25 * api.ROW_COUNT);
+  assert.equal(api.ROW_COUNT, 64);
+  assert.equal(api.VISIBLE_TRAFFIC_COUNT, 512);
+  assert.equal(api.STATUS_PACKET_SIZE, 4);
+  assert.equal(api.TYPE_RF_LOG, 0x05);
+  assert.equal(api.TYPE_RF_LOG_HISTORY, 0x06);
+});
+
+// ---------------------------------------------------------------------------
+// flash-catalog.js — firmware parsing/grouping (window.UVStudioFlashCatalog)
+// ---------------------------------------------------------------------------
+test('flash-catalog keeps its required exports', () => {
+  const api = require(path.join(root, 'js', 'flash-catalog.js'));
+  for (const fn of [
+    'parseFirmwareName',
+    'compareVersionDesc',
+    'categorize',
+    'formatOptionLabel',
+    'hasSharedChirpDriver',
+    'isOffered',
+    'isSlotOffered',
+    'mergeCatalogFiles',
+  ]) {
+    assert.equal(
+      typeof api[fn],
+      'function',
+      `flash-catalog must export ${fn}()`,
+    );
+  }
+});
+
+// ---------------------------------------------------------------------------
+// app-catalog.js — overlay-app discovery (window.UVStudioAppCatalog)
+// ---------------------------------------------------------------------------
+test('app-catalog keeps its required exports', () => {
+  const api = require(path.join(root, 'js', 'app-catalog.js'));
+  for (const fn of [
+    'boot',
+    'compareVersionsDesc',
+    'contentsURL',
+    'displayAppName',
+    'formatAppLabel',
+    'listApps',
+    'listVersions',
+    'parseAppHeader',
+    'parseVersionDirectory',
+    'readAppMetadata',
+  ]) {
+    assert.equal(typeof api[fn], 'function', `app-catalog must export ${fn}()`);
+  }
+});
 
 // ---------------------------------------------------------------------------
 // studio-serial.js — exclusive serial ownership (window.UVStudioSerial, frozen)
