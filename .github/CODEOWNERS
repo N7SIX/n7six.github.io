@@ -1,0 +1,29 @@
+# UV Studio core protection.
+#
+# The core modules (radio protocol, serial ownership, firmware/app catalogs,
+# preference storage, i18n runtime, version) are locked: their public API,
+# frozen globals, protocol constants, and performance are protected by
+# UVStudio/tests/core-contract.test.js and core-performance.test.js.
+# See UVStudio/CORE.md for the full contract and change rules.
+#
+# Replace the placeholder owners below with the real GitHub usernames/teams
+# that must review any change to the core.
+
+# Core logic modules — require core-owner review.
+/UVStudio/js/rf-log.js              @N7SIX
+/UVStudio/js/studio-serial.js       @N7SIX
+/UVStudio/js/studio-preferences.js  @N7SIX
+/UVStudio/js/studio-i18n.js         @N7SIX
+/UVStudio/js/studio-version.js      @N7SIX
+/UVStudio/js/flash.js               @N7SIX
+/UVStudio/js/k5viewer.js            @N7SIX
+/UVStudio/js/flash-catalog.js       @N7SIX
+/UVStudio/js/app-catalog.js         @N7SIX
+
+# The guard suites and the contract document change together with the core.
+/UVStudio/tests/core-contract.test.js     @N7SIX
+/UVStudio/tests/core-performance.test.js  @N7SIX
+/UVStudio/CORE.md                         @N7SIX
+
+# Default owner for everything else in the repository.
+* @N7SIX
