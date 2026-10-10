@@ -1,20 +1,20 @@
 ---
 layout: post
-title: "Installation de MySQL 5.7 sous Slackware 14.1: dirty installation note"
+title: 'Installation de MySQL 5.7 sous Slackware 14.1: dirty installation note'
 author: Armel
 categories: sysadmin
 tags:
-- mysql
-- slackware
+  - mysql
+  - slackware
 ---
+
 Ce billet regroupe quelques notes à propos de l'installation de MySQL 5.7.
 
-Cette procédure a été testée et approuvée sur la distribution Slackware (14.1 64 bits). J'utilise cette distribution depuis 1993. Donc, ne pas s'attendre à l'utilisation de commandes `apt-get` et autres `yum`. On va partir des sources de MySQL, compiler et configurer l'ensemble, etc. 
-
+Cette procédure a été testée et approuvée sur la distribution Slackware (14.1 64 bits). J'utilise cette distribution depuis 1993. Donc, ne pas s'attendre à l'utilisation de commandes `apt-get` et autres `yum`. On va partir des sources de MySQL, compiler et configurer l'ensemble, etc.
 
 ## En préambule
 
-Je concidère qu'aucune version de MySQL ne fonctionne sur le serveur. Bien veiller également à ce qu'aucun fichier */etc/my.cnf* résiduel ne persiste. Sinon, backupez vos bases et votre */etc/my.cnf*, stoppez proprement MySQL et renommer l'arborescence (par exemple */usr/local/mysql* en */usr/local/mysql_old*).
+Je concidère qu'aucune version de MySQL ne fonctionne sur le serveur. Bien veiller également à ce qu'aucun fichier _/etc/my.cnf_ résiduel ne persiste. Sinon, backupez vos bases et votre _/etc/my.cnf_, stoppez proprement MySQL et renommer l'arborescence (par exemple _/usr/local/mysql_ en _/usr/local/mysql_old_).
 
 ## Pré-configuration de MySQL 5.7
 
@@ -27,7 +27,7 @@ $ useradd -r -g mysql -s /bin/false mysql
 
 ## Compilation de MySQL 5.7
 
-Nous allons maintenant compiler MySQL. Je prévois de déployer MySQL sous */usr/local/mysql*. 
+Nous allons maintenant compiler MySQL. Je prévois de déployer MySQL sous _/usr/local/mysql_.
 
 ```
 $ tar xvfz mysql-version.tar.gz
@@ -43,7 +43,7 @@ $ make
 
 À noter les paramètres passés à `cmake` ! Sans eux, la compilation va probablement échouer. On peut maintenant installer MySQL via la commande `make install`.
 
-Avant d'aller plus loin, je le redis à nouveau, bien veiller à ce qu'aucun fichier */etc/my.cnf* ne persiste...
+Avant d'aller plus loin, je le redis à nouveau, bien veiller à ce qu'aucun fichier _/etc/my.cnf_ ne persiste...
 
 ## Post-installation de MySQL
 
@@ -69,9 +69,6 @@ root@globalis-mysql2:/usr/local/mysql# bin/mysql_ssl_rsa_setup
 Generating a 2048 bit RSA private key
 ```
 
-Pour finir, utliser la commande `bin/mysql_secure_installation` afin de ré-initialiser proprement le mot de passe root. On peut alors mettre en place un */etc/rc.d/rc.mysqld* ou prévoir le lancement de MySQL depuis le */etc/rc.d/rc.local*. Sans oublier la mise en place d'un */etc/my.cnf*.
+Pour finir, utliser la commande `bin/mysql_secure_installation` afin de ré-initialiser proprement le mot de passe root. On peut alors mettre en place un _/etc/rc.d/rc.mysqld_ ou prévoir le lancement de MySQL depuis le _/etc/rc.d/rc.local_. Sans oublier la mise en place d'un _/etc/my.cnf_.
 
 That's all !
-
-
-

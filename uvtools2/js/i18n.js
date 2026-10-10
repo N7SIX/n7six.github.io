@@ -10,7 +10,18 @@
   const storedLanguage = localStorage.getItem(LANGUAGE_STORAGE_KEY);
   const legacyLanguage = localStorage.getItem(LEGACY_LANGUAGE_STORAGE_KEY);
   const DEFAULT_LANG = storedLanguage || legacyLanguage || 'en';
-  const supported = ['en', 'fr', 'it', 'es', 'de', 'pt', 'ru', 'pl', 'zh', 'nl'];
+  const supported = [
+    'en',
+    'fr',
+    'it',
+    'es',
+    'de',
+    'pt',
+    'ru',
+    'pl',
+    'zh',
+    'nl',
+  ];
 
   function loadLocale(lang) {
     const locale = window.UVTOOLS_LOCALES?.[lang];
@@ -32,7 +43,9 @@
       if (sel) sel.value = this.lang;
       this.bindSelector();
       // Broadcast ready so other modules can initialize safely
-      window.dispatchEvent(new CustomEvent('i18n:ready', { detail: { lang: this.lang } }));
+      window.dispatchEvent(
+        new CustomEvent('i18n:ready', { detail: { lang: this.lang } }),
+      );
     },
     bindSelector() {
       const sel = document.getElementById('languageSelect');
@@ -49,7 +62,8 @@
         } catch (err) {
           console.error('Failed to switch language:', err);
           const el = document.getElementById('infoBox');
-          if (el) el.innerHTML = `<strong>Error loading language:</strong> ${err.message}`;
+          if (el)
+            el.innerHTML = `<strong>Error loading language:</strong> ${err.message}`;
         }
       });
     },
@@ -62,7 +76,7 @@
       this.lang = supported.includes(lang) ? lang : 'en';
       this.dict = loadLocale(this.lang);
       document.documentElement.lang = this.lang;
-    }
+    },
   };
 
   // Expose globally

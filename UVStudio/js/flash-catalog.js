@@ -36,8 +36,14 @@
 
   // Group labels are technical terms shared across every language.
   const GROUP_ORDER = [
-    'fusion', 'fieldops', 'transfer', 'labs',
-    'development', 'fusion_k1', 'fusion_k5v3', 'stock'
+    'fusion',
+    'fieldops',
+    'transfer',
+    'labs',
+    'development',
+    'fusion_k1',
+    'fusion_k5v3',
+    'stock',
   ];
   const GROUP_LABELS = {
     fusion: 'F4HWN Fusion (stable)',
@@ -47,7 +53,7 @@
     development: 'F4HWN Fusion (dev, unstable)',
     fusion_k1: 'F4HWN Fusion · K1',
     fusion_k5v3: 'F4HWN Fusion · K5v3',
-    stock: 'Quansheng (stock)'
+    stock: 'Quansheng (stock)',
   };
 
   // ========== PURE HELPERS (Node-testable) ==========
@@ -80,17 +86,34 @@
     } else {
       brand = 'f4hwn';
       const editionMatch = lower.match(
-        /^f4hwn[._-](?:(k1|k5v3)[._-])?([a-z][a-z0-9-]*)(?:[._-].*)?\.bin$/
+        /^f4hwn[._-](?:(k1|k5v3)[._-])?([a-z][a-z0-9-]*)(?:[._-].*)?\.bin$/,
       );
       if (!editionMatch) return null;
       const modelToken = editionMatch[1] || '';
       const editionToken = editionMatch[2];
-      if (modelToken === 'k1' && editionToken === 'fusion') { group = 'fusion_k1'; model = 'K1'; }
-      else if (modelToken === 'k5v3' && editionToken === 'fusion') { group = 'fusion_k5v3'; model = 'K5v3'; }
-      else { group = editionToken; model = modelToken === 'k1' ? 'K1' : (modelToken === 'k5v3' ? 'K5v3' : ''); }
+      if (modelToken === 'k1' && editionToken === 'fusion') {
+        group = 'fusion_k1';
+        model = 'K1';
+      } else if (modelToken === 'k5v3' && editionToken === 'fusion') {
+        group = 'fusion_k5v3';
+        model = 'K5v3';
+      } else {
+        group = editionToken;
+        model =
+          modelToken === 'k1' ? 'K1' : modelToken === 'k5v3' ? 'K5v3' : '';
+      }
     }
 
-    return { name, brand, group, model, version, isBeta, isSa818, isDevelopment };
+    return {
+      name,
+      brand,
+      group,
+      model,
+      version,
+      isBeta,
+      isSa818,
+      isDevelopment,
+    };
   }
 
   // Descending semantic comparison so v5.10.0 correctly outranks v5.9.0.
@@ -113,29 +136,43 @@
 
   // Keep only current, stable, non-SA818 firmware images (v5.0 and newer).
   function isOffered(entry) {
-    return entry.isDevelopment ||
-      (!entry.isBeta && !entry.isSa818 && majorVersion(entry.version) >= MIN_MAJOR_VERSION);
+    return (
+      entry.isDevelopment ||
+      (!entry.isBeta &&
+        !entry.isSa818 &&
+        majorVersion(entry.version) >= MIN_MAJOR_VERSION)
+    );
   }
 
   // Multiboot slots offer stable v6+ F4HWN editions. Older images, the rolling
   // development build and Quansheng stock images do not embed multiboot.
   function isSlotOffered(entry) {
-    return Boolean(entry) && isOffered(entry) && entry.brand === 'f4hwn' &&
-      !entry.isDevelopment && majorVersion(entry.version) >= MIN_SLOT_MAJOR_VERSION;
+    return (
+      Boolean(entry) &&
+      isOffered(entry) &&
+      entry.brand === 'f4hwn' &&
+      !entry.isDevelopment &&
+      majorVersion(entry.version) >= MIN_SLOT_MAJOR_VERSION
+    );
   }
 
   // Every stable, versioned F4HWN edition shares the CHIRP driver published for
   // that firmware version. Development and stock Quansheng builds do not.
   function hasSharedChirpDriver(entry) {
-    return Boolean(entry) && isOffered(entry) && entry.brand === 'f4hwn' &&
-      !entry.isDevelopment && Boolean(entry.version);
+    return (
+      Boolean(entry) &&
+      isOffered(entry) &&
+      entry.brand === 'f4hwn' &&
+      !entry.isDevelopment &&
+      Boolean(entry.version)
+    );
   }
 
   function normalizeFile(file) {
     return {
       name: file && file.name,
       size: file && file.size,
-      download_url: file && file.download_url
+      download_url: file && file.download_url,
     };
   }
 
@@ -143,7 +180,7 @@
   // development branch, even if a stale copy happens to exist on main.
   function mergeCatalogFiles(stableFiles, developmentFile) {
     const files = (Array.isArray(stableFiles) ? stableFiles : [])
-      .filter(file => file && file.name !== DEVELOPMENT_FILENAME)
+      .filter((file) => file && file.name !== DEVELOPMENT_FILENAME)
       .map(normalizeFile);
     if (developmentFile && developmentFile.name === DEVELOPMENT_FILENAME) {
       files.push(normalizeFile(developmentFile));
@@ -155,18 +192,22 @@
   // of firmware families, newest version first within each family.
   function categorize(files) {
     const groups = new Map();
-    GROUP_ORDER.forEach(id => groups.set(id, []));
+    GROUP_ORDER.forEach((id) => groups.set(id, []));
 
-    (Array.isArray(files) ? files : []).forEach(file => {
+    (Array.isArray(files) ? files : []).forEach((file) => {
       const parsed = parseFirmwareName(file && file.name);
       if (!parsed || !groups.has(parsed.group) || !isOffered(parsed)) return;
-      groups.get(parsed.group).push(Object.assign(parsed, {
-        size: file.size,
-        url: file.download_url
-      }));
+      groups.get(parsed.group).push(
+        Object.assign(parsed, {
+          size: file.size,
+          url: file.download_url,
+        }),
+      );
     });
 
-    groups.forEach(list => list.sort((a, b) => compareVersionDesc(a.version, b.version)));
+    groups.forEach((list) =>
+      list.sort((a, b) => compareVersionDesc(a.version, b.version)),
+    );
     return groups;
   }
 
@@ -178,7 +219,8 @@
     if (entry.isDevelopment) parts.push('⚠ Development · unstable');
     else parts.push(entry.version ? `v${entry.version}` : entry.name);
     let label = parts.join(' ');
-    if (Number.isFinite(entry.size)) label += ` · ${Math.round(entry.size / 1024)} KB`;
+    if (Number.isFinite(entry.size))
+      label += ` · ${Math.round(entry.size / 1024)} KB`;
     return label;
   }
 
@@ -190,7 +232,7 @@
     hasSharedChirpDriver,
     isOffered,
     isSlotOffered,
-    mergeCatalogFiles
+    mergeCatalogFiles,
   };
 
   // ========== BROWSER RUNTIME ==========
@@ -207,7 +249,9 @@
 
     // Purge the obsolete persistent listing cache written by earlier versions.
     if (window.UVStudioPreferences) {
-      try { window.UVStudioPreferences.remove('uvstudio.firmwareCatalog'); } catch (e) {}
+      try {
+        window.UVStudioPreferences.remove('uvstudio.firmwareCatalog');
+      } catch (e) {}
     }
 
     // Kept only in memory for the lifetime of the page. When the listing cannot be
@@ -231,13 +275,15 @@
 
     async function fetchDevelopmentFile() {
       try {
-        const response = await fetch(DEVELOPMENT_API_URL, { cache: 'no-cache' });
+        const response = await fetch(DEVELOPMENT_API_URL, {
+          cache: 'no-cache',
+        });
         if (!response.ok) return null;
         const item = await response.json();
         return {
           name: item.name,
           size: item.size,
-          download_url: item.download_url
+          download_url: item.download_url,
         };
       } catch (error) {
         return null;
@@ -257,13 +303,13 @@
       targetSelect.appendChild(placeholder);
 
       let optionCount = 0;
-      GROUP_ORDER.forEach(id => {
+      GROUP_ORDER.forEach((id) => {
         const entries = (groups.get(id) || []).filter(entryFilter);
         if (!entries.length) return;
 
         const optgroup = document.createElement('optgroup');
         optgroup.label = GROUP_LABELS[id];
-        entries.forEach(entry => {
+        entries.forEach((entry) => {
           const option = document.createElement('option');
           option.value = entry.url;
           option.textContent = formatOptionLabel(entry);
@@ -274,7 +320,10 @@
       });
 
       // Preserve the current choice across a re-render (e.g. language change).
-      if (previous && targetSelect.querySelector(`option[value="${CSS.escape(previous)}"]`)) {
+      if (
+        previous &&
+        targetSelect.querySelector(`option[value="${CSS.escape(previous)}"]`)
+      ) {
         targetSelect.value = previous;
       }
       return optionCount;
@@ -284,7 +333,7 @@
       if (!groups) return { flash: 0, slots: 0 };
       return {
         flash: select ? renderSelect(select) : 0,
-        slots: slotSelect ? renderSelect(slotSelect, isSlotOffered) : 0
+        slots: slotSelect ? renderSelect(slotSelect, isSlotOffered) : 0,
       };
     }
 
@@ -298,7 +347,11 @@
           // hammering the API on every Flash-view open.
           const remaining = response.headers.get('x-ratelimit-remaining');
           const reset = Number(response.headers.get('x-ratelimit-reset'));
-          if ((response.status === 403 || response.status === 429) && remaining === '0' && reset) {
+          if (
+            (response.status === 403 || response.status === 429) &&
+            remaining === '0' &&
+            reset
+          ) {
             retryUntil = reset * 1000;
           }
           throw new Error(`HTTP ${response.status}`);
@@ -311,13 +364,17 @@
         showCatalog(counts.flash > 0, counts.slots > 0);
         loaded = counts.flash > 0 || counts.slots > 0;
         const slotEntries = [];
-        groups.forEach(entries => {
-          const latest = entries.find(entry => isSlotOffered(entry) && !entry.model);
+        groups.forEach((entries) => {
+          const latest = entries.find(
+            (entry) => isSlotOffered(entry) && !entry.model,
+          );
           if (latest) slotEntries.push(latest);
         });
-        window.dispatchEvent(new CustomEvent('uvstudio:slotcatalogversions', {
-          detail: { entries: slotEntries }
-        }));
+        window.dispatchEvent(
+          new CustomEvent('uvstudio:slotcatalogversions', {
+            detail: { entries: slotEntries },
+          }),
+        );
       } catch (error) {
         // No connection, or the API is unreachable / rate limited: keep the whole
         // picker hidden so only the local-file input remains — same as offline.
@@ -359,26 +416,42 @@
 
     // Mutual exclusivity: when a local file is picked, drop the catalog selection
     // back to its placeholder so only one firmware source ever looks selected.
-    window.addEventListener('uvstudio:firmwareselect', event => {
-      if (select && event.detail && event.detail.source === 'local' && select.options.length) {
+    window.addEventListener('uvstudio:firmwareselect', (event) => {
+      if (
+        select &&
+        event.detail &&
+        event.detail.source === 'local' &&
+        select.options.length
+      ) {
         select.selectedIndex = 0;
       }
     });
 
-    window.addEventListener('uvstudio:slotfirmwareselect', event => {
-      if (slotSelect && event.detail && event.detail.source === 'local' && slotSelect.options.length) {
+    window.addEventListener('uvstudio:slotfirmwareselect', (event) => {
+      if (
+        slotSelect &&
+        event.detail &&
+        event.detail.source === 'local' &&
+        slotSelect.options.length
+      ) {
         slotSelect.selectedIndex = 0;
       }
     });
 
     // Lazily fetch the shared catalog the first time either firmware view is
     // opened, so users who never manage firmware do not spend a GitHub API call.
-    window.addEventListener('uvstudio:toolviewchange', event => {
-      if (event.detail && (event.detail.view === 'flash' || event.detail.view === 'slots')) load();
+    window.addEventListener('uvstudio:toolviewchange', (event) => {
+      if (
+        event.detail &&
+        (event.detail.view === 'flash' || event.detail.view === 'slots')
+      )
+        load();
     });
 
     // Retry once connectivity comes back after a failed load.
-    window.addEventListener('online', () => { if (!loaded) load(); });
+    window.addEventListener('online', () => {
+      if (!loaded) load();
+    });
 
     // Load immediately only when one of the firmware views is actually shown on
     // arrival (flash-content is "active" by default, so also require the tools pane
@@ -386,9 +459,12 @@
     const paneTools = document.getElementById('pane-tools');
     const flashView = document.getElementById('flash-content');
     const slotsView = document.getElementById('slots-content');
-    if (paneTools && paneTools.classList.contains('active') &&
-        ((flashView && flashView.classList.contains('active')) ||
-         (slotsView && slotsView.classList.contains('active')))) {
+    if (
+      paneTools &&
+      paneTools.classList.contains('active') &&
+      ((flashView && flashView.classList.contains('active')) ||
+        (slotsView && slotsView.classList.contains('active')))
+    ) {
       load();
     }
   }

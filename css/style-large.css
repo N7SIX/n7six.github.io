@@ -6,39 +6,39 @@
 
 /* Header */
 
-	#header {
-		padding: 4.5em 2em 2em 2em;
-		width: 30%;
-	}
+#header {
+  padding: 4.5em 2em 2em 2em;
+  width: 30%;
+}
 
-		#header h1 {
-			font-size: 1.25em;
-		}
+#header h1 {
+  font-size: 1.25em;
+}
 
-			#header h1 br {
-				display: none;
-			}
+#header h1 br {
+  display: none;
+}
 
 /* Footer */
 
-	#footer {
-		padding: 0 2em 2em 2em;
-		width: 30%;
-	}
+#footer {
+  padding: 0 2em 2em 2em;
+  width: 30%;
+}
 
-	#footer .copyright li {
-		border-left-width: 0;
-		display: block;
-		line-height: 2em;
-		margin-left: 0;
-		padding-left: 0;
-	}
+#footer .copyright li {
+  border-left-width: 0;
+  display: block;
+  line-height: 2em;
+  margin-left: 0;
+  padding-left: 0;
+}
 
 /* Main */
 
-	#main {
-		margin-left: 30%;
-		max-width: none;
-		padding: 6em 3em 3em 3em;
-		width: calc(100% - 30%);
-	}
+#main {
+  margin-left: 30%;
+  max-width: none;
+  padding: 6em 3em 3em 3em;
+  width: calc(100% - 30%);
+}

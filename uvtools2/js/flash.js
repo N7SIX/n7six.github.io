@@ -1,6 +1,6 @@
 // js/flash.js
 // UV-K5 Web Flasher core logic (Web Serial + protocol)
-// Adds: 
+// Adds:
 // - Auto-load of firmware from URL param ?firmwareURL=... (or ?fw=...)
 // - Requires i18n.js to be loaded first (window.i18nReady).
 // - Defines window.updateUI() to (re)apply translations to the DOM.
@@ -18,37 +18,39 @@ const BAUDRATE = 38400;
 const MSG_NOTIFY_DEV_INFO = 0x0518;
 const MSG_NOTIFY_BL_VER = 0x0530;
 const MSG_PROG_FW = 0x0519;
-const MSG_PROG_FW_RESP = 0x051A;
+const MSG_PROG_FW_RESP = 0x051a;
 const MSG_DEV_INFO_REQ = 0x0514;
 const MSG_DEV_INFO_RESP = 0x0515;
-const MSG_READ_EEPROM = 0x051B;
-const MSG_READ_EEPROM_RESP = 0x051C;
-const MSG_WRITE_EEPROM = 0x051D;
-const MSG_WRITE_EEPROM_RESP = 0x051E;
-const MSG_REBOOT = 0x05DD;
+const MSG_READ_EEPROM = 0x051b;
+const MSG_READ_EEPROM_RESP = 0x051c;
+const MSG_WRITE_EEPROM = 0x051d;
+const MSG_WRITE_EEPROM_RESP = 0x051e;
+const MSG_REBOOT = 0x05dd;
 
 const OBFUS_TBL = new Uint8Array([
-  0x16, 0x6c, 0x14, 0xe6, 0x2e, 0x91, 0x0d, 0x40,
-  0x21, 0x35, 0xd5, 0x40, 0x13, 0x03, 0xe9, 0x80
+  0x16, 0x6c, 0x14, 0xe6, 0x2e, 0x91, 0x0d, 0x40, 0x21, 0x35, 0xd5, 0x40, 0x13,
+  0x03, 0xe9, 0x80,
 ]);
 
 // Calibration memory layout
 const CALIB_SIZE = 512; // bytes
 const CHUNK_SIZE = 16;
-let CALIB_OFFSET = 0x1E00; // Default for firmware < v5.0.0
+let CALIB_OFFSET = 0x1e00; // Default for firmware < v5.0.0
 
 // Boot logo memory layout (mirrors firmware App/ui/welcome.c)
 // Layout in flash sector starting at PY25Q16 0x011000, exposed via EEPROM
 // compat at 0x00C000:
 //   [0x00..0x07] 8-byte magic header "F4HWNLGO"
 //   [0x08..0x407] 1024-byte bitmap, ST7565-native column-major LSB-top
-const LOGO_EEPROM_OFFSET = 0xC000;
+const LOGO_EEPROM_OFFSET = 0xc000;
 const LOGO_HEADER_SIZE = 8;
 const LOGO_BITMAP_SIZE = 1024;
 const LOGO_TOTAL_SIZE = LOGO_HEADER_SIZE + LOGO_BITMAP_SIZE; // 1032
 // Padded to a CHUNK_SIZE multiple so we can stream by 16-byte chunks like calib.
 const LOGO_PADDED_SIZE = Math.ceil(LOGO_TOTAL_SIZE / CHUNK_SIZE) * CHUNK_SIZE; // 1040
-const LOGO_MAGIC = new Uint8Array([0x46, 0x34, 0x48, 0x57, 0x4E, 0x4C, 0x47, 0x4F]); // "F4HWNLGO"
+const LOGO_MAGIC = new Uint8Array([
+  0x46, 0x34, 0x48, 0x57, 0x4e, 0x4c, 0x47, 0x4f,
+]); // "F4HWNLGO"
 const LOGO_WIDTH = 128;
 const LOGO_HEIGHT = 64;
 
@@ -76,8 +78,8 @@ let isReading = false;
 let rfLogDownloadUrl = null;
 
 // Logo state
-let logoSourceImage = null;       // HTMLImageElement of the user-picked file
-let logoBitmap = null;            // Uint8Array(1024) ST7565-native, after threshold/invert
+let logoSourceImage = null; // HTMLImageElement of the user-picked file
+let logoBitmap = null; // Uint8Array(1024) ST7565-native, after threshold/invert
 
 // ========== UI ELEMENTS ==========
 const flashBtn = document.getElementById('flashBtn');
@@ -132,20 +134,20 @@ const rfLogLink = document.getElementById('rfLogLink');
 function isBootloaderCompatible(version, minVersion) {
   // Parse version strings (e.g., "7.02.02")
   const parseVersion = (v) => {
-    const parts = v.split('.').map(p => parseInt(p, 10) || 0);
+    const parts = v.split('.').map((p) => parseInt(p, 10) || 0);
     while (parts.length < 3) parts.push(0);
     return parts;
   };
-  
+
   const current = parseVersion(version);
   const required = parseVersion(minVersion);
-  
+
   // Compare major.minor.patch
   for (let i = 0; i < 3; i++) {
     if (current[i] > required[i]) return true;
     if (current[i] < required[i]) return false;
   }
-  
+
   return true; // Equal versions are compatible
 }
 
@@ -171,7 +173,7 @@ window.updateUI = function updateUI() {
 
   // Update info box based on active tab
   updateInfoBox();
-  
+
   if (flashBtn) flashBtn.textContent = t('flashBtn');
   if (dumpBtn) dumpBtn.textContent = t('dumpBtn');
   if (restoreBtn) restoreBtn.textContent = t('restoreBtn');
@@ -215,13 +217,15 @@ window.updateUI = function updateUI() {
   const logoDumpedLabel = document.getElementById('logoDumpedLabel');
   const logoDumpDownloadText = document.getElementById('logoDumpDownloadText');
   if (labelLogoFile) labelLogoFile.textContent = t('labelLogoFile');
-  if (labelLogoThreshold) labelLogoThreshold.textContent = t('labelLogoThreshold');
+  if (labelLogoThreshold)
+    labelLogoThreshold.textContent = t('labelLogoThreshold');
   if (labelLogoInvert) labelLogoInvert.textContent = t('labelLogoInvert');
   if (labelLogoPreview) labelLogoPreview.textContent = t('labelLogoPreview');
   if (logoUploadDesc) logoUploadDesc.textContent = t('logoUploadDescription');
   if (logoDumpDesc) logoDumpDesc.textContent = t('logoDumpDescription');
   if (logoDumpedLabel) logoDumpedLabel.textContent = t('logoDumpedLabel');
-  if (logoDumpDownloadText) logoDumpDownloadText.textContent = t('logoDumpDownloadText');
+  if (logoDumpDownloadText)
+    logoDumpDownloadText.textContent = t('logoDumpDownloadText');
   if (logoUploadBtn) logoUploadBtn.textContent = t('logoUploadBtn');
   if (logoDumpBtn) logoDumpBtn.textContent = t('logoDumpBtn');
   if (logoFileButton) logoFileButton.textContent = t('fileChoose');
@@ -287,18 +291,22 @@ window.addEventListener('i18n:ready', () => {
 })();
 
 // ========== TABS ==========
-document.querySelectorAll('.tab').forEach(tab => {
+document.querySelectorAll('.tab').forEach((tab) => {
   tab.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(t => {
+    document.querySelectorAll('.tab').forEach((t) => {
       t.classList.remove('active');
       t.setAttribute('aria-selected', 'false');
     });
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-    
+    document
+      .querySelectorAll('.tab-content')
+      .forEach((c) => c.classList.remove('active'));
+
     tab.classList.add('active');
     tab.setAttribute('aria-selected', 'true');
-    document.getElementById(tab.dataset.tab + '-content').classList.add('active');
-    
+    document
+      .getElementById(tab.dataset.tab + '-content')
+      .classList.add('active');
+
     // Update info box when tab changes
     updateInfoBox();
   });
@@ -309,8 +317,13 @@ if (logToggle) {
   logToggle.addEventListener('click', () => {
     if (!logDiv) return;
     logDiv.classList.toggle('visible');
-    logToggle.textContent = logDiv.classList.contains('visible') ? t('logHide') : t('logShow');
-    logToggle.setAttribute('aria-expanded', logDiv.classList.contains('visible') ? 'true' : 'false');
+    logToggle.textContent = logDiv.classList.contains('visible')
+      ? t('logHide')
+      : t('logShow');
+    logToggle.setAttribute(
+      'aria-expanded',
+      logDiv.classList.contains('visible') ? 'true' : 'false',
+    );
   });
 }
 
@@ -363,13 +376,18 @@ async function loadFirmwareFromURL(url) {
       }
     }
 
-    const res = await fetch(urlObj.toString(), { cache: 'no-cache', mode: 'cors' });
+    const res = await fetch(urlObj.toString(), {
+      cache: 'no-cache',
+      mode: 'cors',
+    });
     if (!res.ok) {
       throw new Error(`${t('urlFetchError')} HTTP ${res.status}`);
     }
 
     const buf = await res.arrayBuffer();
-    const fname = (urlObj.pathname.split('/').pop() || 'firmware.bin').split('?')[0];
+    const fname = (urlObj.pathname.split('/').pop() || 'firmware.bin').split(
+      '?',
+    )[0];
 
     setFirmwareBuffer(buf, fname);
 
@@ -456,16 +474,24 @@ async function connect() {
 async function disconnect() {
   isReading = false;
   if (reader) {
-    try { await reader.cancel(); } catch {}
-    try { reader.releaseLock(); } catch {}
+    try {
+      await reader.cancel();
+    } catch {}
+    try {
+      reader.releaseLock();
+    } catch {}
     reader = null;
   }
   if (writer) {
-    try { await writer.close(); } catch {}
+    try {
+      await writer.close();
+    } catch {}
     writer = null;
   }
   if (port) {
-    try { await port.close(); } catch {}
+    try {
+      await port.close();
+    } catch {}
     port = null;
   }
   log(t('disconnected'), 'info');
@@ -474,7 +500,7 @@ async function disconnect() {
 function startReading() {
   if (!reader || isReading) return;
   isReading = true;
-  readLoop().catch(e => {
+  readLoop().catch((e) => {
     if (isReading) log(t('loopError', e?.message ?? String(e)), 'error');
   });
 }
@@ -519,9 +545,9 @@ function makePacket(msg) {
   const buf = new Uint8Array(8 + msgLen);
   const view = new DataView(buf.buffer);
 
-  view.setUint16(0, 0xCDAB, true);
+  view.setUint16(0, 0xcdab, true);
   view.setUint16(2, msgLen, true);
-  view.setUint16(6 + msgLen, 0xBADC, true);
+  view.setUint16(6 + msgLen, 0xbadc, true);
 
   for (let i = 0; i < msg.length; i++) buf[4 + i] = msg[i];
 
@@ -543,7 +569,8 @@ function fetchMessage(buf) {
     }
   }
   if (packBegin === -1) {
-    if (buf.length > 0 && buf[buf.length - 1] === 0xab) buf.splice(0, buf.length - 1);
+    if (buf.length > 0 && buf[buf.length - 1] === 0xab)
+      buf.splice(0, buf.length - 1);
     else buf.length = 0;
     return null;
   }
@@ -571,7 +598,8 @@ function fetchMessage(buf) {
 }
 
 function obfuscate(buf, off, size) {
-  for (let i = 0; i < size; i++) buf[off + i] ^= OBFUS_TBL[i % OBFUS_TBL.length];
+  for (let i = 0; i < size; i++)
+    buf[off + i] ^= OBFUS_TBL[i % OBFUS_TBL.length];
 }
 
 function calcCRC(buf, off, size) {
@@ -588,7 +616,9 @@ function calcCRC(buf, off, size) {
 }
 
 function arrayToHex(arr) {
-  return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join(' ');
+  return Array.from(arr)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join(' ');
 }
 
 // ========== FLASH FIRMWARE (from original flash.js) ==========
@@ -642,7 +672,12 @@ async function flashFirmware() {
     }
 
     const expectedBl = blVersionInput?.value?.trim?.() ?? '';
-    if (expectedBl !== '*' && expectedBl !== '?' && expectedBl !== '' && devInfo.blVersion !== expectedBl) {
+    if (
+      expectedBl !== '*' &&
+      expectedBl !== '?' &&
+      expectedBl !== '' &&
+      devInfo.blVersion !== expectedBl
+    ) {
       log(t('blWarning', expectedBl, devInfo.blVersion), 'error');
     }
     log(t('deviceDetected'), 'success');
@@ -658,7 +693,9 @@ async function flashFirmware() {
 
     // Global community counter (shared with UV Studio): firmware flashed OK.
     // Best-effort — never blocks or fails the flash.
-    try { window.UVToolsFlashCounter && window.UVToolsFlashCounter.increment(); } catch (e) {}
+    try {
+      window.UVToolsFlashCounter && window.UVToolsFlashCounter.increment();
+    } catch (e) {}
 
     setTimeout(() => {
       if (progressContainer) progressContainer.style.display = 'none';
@@ -671,7 +708,9 @@ async function flashFirmware() {
 }
 
 async function waitForDeviceInfo() {
-  let lastTimestamp = 0, acc = 0, timeout = 0;
+  let lastTimestamp = 0,
+    acc = 0,
+    timeout = 0;
   log(t('waiting'), 'info');
 
   while (timeout < 500) {
@@ -681,7 +720,10 @@ async function waitForDeviceInfo() {
     const msg = fetchMessage(readBuffer);
     if (!msg) continue;
 
-    log(t('messageReceived', msg.msgType.toString(16).padStart(4, '0')), 'info');
+    log(
+      t('messageReceived', msg.msgType.toString(16).padStart(4, '0')),
+      'info',
+    );
 
     if (msg.msgType === MSG_NOTIFY_DEV_INFO) {
       const now = Date.now();
@@ -702,7 +744,9 @@ async function waitForDeviceInfo() {
             }
           }
           if (blVersionEnd === -1) blVersionEnd = 32;
-          const blVersion = new TextDecoder().decode(msg.data.slice(16, blVersionEnd));
+          const blVersion = new TextDecoder().decode(
+            msg.data.slice(16, blVersionEnd),
+          );
           return { uid, blVersion };
         }
       } else {
@@ -725,7 +769,8 @@ async function performHandshake(blVersion) {
 
       const blMsg = createMessage(MSG_NOTIFY_BL_VER, 4);
       const blBytes = new TextEncoder().encode(blVersion.substring(0, 4));
-      for (let i = 0; i < Math.min(blBytes.length, 4); i++) blMsg[4 + i] = blBytes[i];
+      for (let i = 0; i < Math.min(blBytes.length, 4); i++)
+        blMsg[4 + i] = blBytes[i];
       await sendMessage(blMsg);
       acc++;
       await sleep(50);
@@ -749,7 +794,8 @@ async function programFirmware() {
   const timestamp = Date.now() & 0xffffffff;
   log(t('programming', pageCount), 'info');
 
-  let pageIndex = 0, retryCount = 0;
+  let pageIndex = 0,
+    retryCount = 0;
   const MAX_RETRIES = 3;
 
   while (pageIndex < pageCount) {
@@ -780,13 +826,17 @@ async function programFirmware() {
         const err = dv.getUint16(6, true);
 
         if (respPageIndex !== pageIndex) {
-          log(t('pageWrongResponse', pageIndex + 1, pageCount, respPageIndex), 'error');
+          log(
+            t('pageWrongResponse', pageIndex + 1, pageCount, respPageIndex),
+            'error',
+          );
           continue;
         }
         if (err !== 0) {
           log(t('pageError', pageIndex + 1, pageCount, err), 'error');
           retryCount++;
-          if (retryCount > MAX_RETRIES) throw new Error(t('tooManyErrors', pageIndex));
+          if (retryCount > MAX_RETRIES)
+            throw new Error(t('tooManyErrors', pageIndex));
           break;
         }
 
@@ -802,7 +852,8 @@ async function programFirmware() {
     } else {
       log(t('pageTimeout', pageIndex + 1, pageCount), 'error');
       retryCount++;
-      if (retryCount > MAX_RETRIES) throw new Error(t('tooManyTimeouts', pageIndex));
+      if (retryCount > MAX_RETRIES)
+        throw new Error(t('tooManyTimeouts', pageIndex));
     }
   }
 }
@@ -915,11 +966,11 @@ restoreBtn.addEventListener('click', async () => {
       view.setUint16(6, CHUNK_SIZE, true);
       msg[7] = 1;
       view.setUint32(8, devInfo.timestamp, true);
-      
+
       for (let j = 0; j < CHUNK_SIZE; j++) {
         msg[12 + j] = calibData[i + j];
       }
-      
+
       await sendMessage(msg);
 
       let gotResponse = false;
@@ -969,19 +1020,22 @@ restoreBtn.addEventListener('click', async () => {
 // ========== REQUEST DEVICE INFO (for dump/restore) ==========
 async function requestDeviceInfo() {
   log(t('establishing'), 'info');
-  
+
   const ts = Date.now() & 0xffffffff;
   const msg = createMessage(MSG_DEV_INFO_REQ, 4);
   new DataView(msg.buffer).setUint32(4, ts, true);
   await sendMessage(msg);
-  
+
   for (let timeout = 0; timeout < 500; timeout++) {
     await sleep(10);
     const resp = fetchMessage(readBuffer);
     if (!resp) continue;
-    
-    log(t('messageReceived', resp.msgType.toString(16).padStart(4, '0')), 'info');
-    
+
+    log(
+      t('messageReceived', resp.msgType.toString(16).padStart(4, '0')),
+      'info',
+    );
+
     if (resp.msgType === MSG_DEV_INFO_RESP) {
       // Log raw device info data
       logDeviceInfo(resp.data);
@@ -998,27 +1052,27 @@ function logDeviceInfo(data) {
   let deviceInfoStr = '';
   for (let i = 0; i < data.length; i++) {
     const c = data[i];
-    if (c === 0x00 || c === 0xFF) break; // Stop at null or padding
+    if (c === 0x00 || c === 0xff) break; // Stop at null or padding
     if (c >= 32 && c < 127) {
       deviceInfoStr += String.fromCharCode(c);
     }
   }
-  
+
   if (deviceInfoStr) {
     log(`Device: ${deviceInfoStr}`, 'success');
-    
+
     // Extract version from string (e.g., "F4HWN v4.3.3" -> "4.3.3")
     const versionMatch = deviceInfoStr.match(/v(\d+\.\d+\.\d+)/);
     if (versionMatch) {
       const version = versionMatch[1];
       const [major] = version.split('.').map(Number);
-      
+
       // Set CALIB_OFFSET based on version
       if (major >= 5) {
-        CALIB_OFFSET = 0xB000;
+        CALIB_OFFSET = 0xb000;
         log(`Firmware v${version} detected: CALIB_OFFSET = 0xB000`, 'info');
       } else {
-        CALIB_OFFSET = 0x1E00;
+        CALIB_OFFSET = 0x1e00;
         log(`Firmware v${version} detected: CALIB_OFFSET = 0x1E00`, 'info');
       }
     }
@@ -1074,11 +1128,14 @@ function imageToLogoBitmap(image, threshold, invert) {
         const y = page * 8 + bit;
         const idx = (y * LOGO_WIDTH + x) * 4;
         // Convert RGBA to luminance (Rec. 601)
-        const lum = 0.299 * imgData[idx] + 0.587 * imgData[idx + 1] + 0.114 * imgData[idx + 2];
+        const lum =
+          0.299 * imgData[idx] +
+          0.587 * imgData[idx + 1] +
+          0.114 * imgData[idx + 2];
         // Pixel is "on" (LCD pixel lit, dark on screen) if luminance < threshold
         let on = lum < threshold;
         if (invert) on = !on;
-        if (on) byte |= (1 << bit);
+        if (on) byte |= 1 << bit;
       }
       bitmap[page * LOGO_WIDTH + x] = byte;
     }
@@ -1152,7 +1209,8 @@ if (logoFileInput) {
 
 if (logoThresholdInput) {
   logoThresholdInput.addEventListener('input', () => {
-    if (logoThresholdValue) logoThresholdValue.textContent = logoThresholdInput.value;
+    if (logoThresholdValue)
+      logoThresholdValue.textContent = logoThresholdInput.value;
     refreshLogoPreview();
   });
 }
@@ -1180,7 +1238,7 @@ if (logoUploadBtn) {
 
       // Build full payload: 8-byte magic + 1024-byte bitmap, padded to 16-byte chunks.
       const payload = new Uint8Array(LOGO_PADDED_SIZE);
-      payload.fill(0xFF);
+      payload.fill(0xff);
       payload.set(LOGO_MAGIC, 0);
       payload.set(logoBitmap, LOGO_HEADER_SIZE);
 
@@ -1306,12 +1364,21 @@ if (logoDumpBtn) {
       // Verify magic header (informational only, do not abort if missing).
       let magicOk = true;
       for (let i = 0; i < LOGO_HEADER_SIZE; i++) {
-        if (dumped[i] !== LOGO_MAGIC[i]) { magicOk = false; break; }
+        if (dumped[i] !== LOGO_MAGIC[i]) {
+          magicOk = false;
+          break;
+        }
       }
-      log(magicOk ? t('logoMagicOk') : t('logoMagicMissing'), magicOk ? 'success' : 'info');
+      log(
+        magicOk ? t('logoMagicOk') : t('logoMagicMissing'),
+        magicOk ? 'success' : 'info',
+      );
 
       // Extract bitmap and render
-      const bitmap = dumped.slice(LOGO_HEADER_SIZE, LOGO_HEADER_SIZE + LOGO_BITMAP_SIZE);
+      const bitmap = dumped.slice(
+        LOGO_HEADER_SIZE,
+        LOGO_HEADER_SIZE + LOGO_BITMAP_SIZE,
+      );
       if (logoDumpedCanvas) {
         bitmapToCanvas(bitmap, logoDumpedCanvas);
         logoDumpedCanvas.toBlob((blob) => {
@@ -1370,7 +1437,8 @@ async function collectRfLogRows() {
         try {
           packet = rf.parseMainPacket(frame.payload);
         } catch (error) {
-          if (error.code === 'RF_LOG_VERSION') throw new Error(t('rfLogVersionUnsupported'));
+          if (error.code === 'RF_LOG_VERSION')
+            throw new Error(t('rfLogVersionUnsupported'));
           throw error;
         }
 
@@ -1379,9 +1447,12 @@ async function collectRfLogRows() {
           if (!firstMainAt) firstMainAt = Date.now();
           if (!packet.hasTraffic) return [];
           rf.mergeRows(rows, packet.rows);
-          const trafficCount = Array.from(rows.values())
-            .filter(row => (row.flags & rf.FLAG_SESSION) === 0).length;
-          updateProgress(Math.min(99, (trafficCount / rf.VISIBLE_TRAFFIC_COUNT) * 100));
+          const trafficCount = Array.from(rows.values()).filter(
+            (row) => (row.flags & rf.FLAG_SESSION) === 0,
+          ).length;
+          updateProgress(
+            Math.min(99, (trafficCount / rf.VISIBLE_TRAFFIC_COUNT) * 100),
+          );
           if (packet.rows.length < rf.ROW_COUNT) {
             return rf.limitVisibleRows(rows.values());
           }
@@ -1392,12 +1463,18 @@ async function collectRfLogRows() {
         lastHistoryAt = Date.now();
         rf.mergeRows(rows, page);
 
-        const trafficCount = Array.from(rows.values())
-          .filter(row => (row.flags & rf.FLAG_SESSION) === 0).length;
-        updateProgress(Math.min(99, (trafficCount / rf.VISIBLE_TRAFFIC_COUNT) * 100));
+        const trafficCount = Array.from(rows.values()).filter(
+          (row) => (row.flags & rf.FLAG_SESSION) === 0,
+        ).length;
+        updateProgress(
+          Math.min(99, (trafficCount / rf.VISIBLE_TRAFFIC_COUNT) * 100),
+        );
         log(t('rfLogProgress', trafficCount), 'info');
 
-        if (page.length < rf.ROW_COUNT || trafficCount >= rf.VISIBLE_TRAFFIC_COUNT) {
+        if (
+          page.length < rf.ROW_COUNT ||
+          trafficCount >= rf.VISIBLE_TRAFFIC_COUNT
+        ) {
           return rf.limitVisibleRows(rows.values());
         }
       }
@@ -1434,14 +1511,15 @@ if (rfLogExportBtn) {
       log(t('rfLogReading'), 'info');
 
       const rows = await collectRfLogRows();
-      const trafficCount = rows.filter(row =>
-        (row.flags & window.UVTOOLS_RF_LOG.FLAG_SESSION) === 0).length;
+      const trafficCount = rows.filter(
+        (row) => (row.flags & window.UVTOOLS_RF_LOG.FLAG_SESSION) === 0,
+      ).length;
       if (trafficCount === 0) throw new Error(t('rfLogEmpty'));
 
       const csv = window.UVTOOLS_RF_LOG.rowsToCsv(rows);
       if (rfLogDownloadUrl) URL.revokeObjectURL(rfLogDownloadUrl);
       rfLogDownloadUrl = URL.createObjectURL(
-        new Blob([csv], { type: 'text/csv;charset=utf-8' })
+        new Blob([csv], { type: 'text/csv;charset=utf-8' }),
       );
       if (rfLogLink) {
         rfLogLink.href = rfLogDownloadUrl;
@@ -1492,7 +1570,7 @@ function updateProgress(percent) {
 }
 
 function sleep(ms) {
-  return new Promise(r => setTimeout(r, ms));
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 // ========== CAPABILITY CHECK ==========
@@ -1510,15 +1588,15 @@ if (!('serial' in navigator)) {
 
 (function () {
   const params = new URLSearchParams(window.location.search);
-  const mode = params.get("mode") || "flash";
+  const mode = params.get('mode') || 'flash';
 
   const modeMap = {
-    flash: "tabFlash",
-    dump: "tabDump",
-    restore: "tabRestore",
-    "rf-log": "tabRfLog",
-    "logo-upload": "tabLogoUpload",
-    "logo-dump": "tabLogoDump"
+    flash: 'tabFlash',
+    dump: 'tabDump',
+    restore: 'tabRestore',
+    'rf-log': 'tabRfLog',
+    'logo-upload': 'tabLogoUpload',
+    'logo-dump': 'tabLogoDump',
   };
 
   const tabId = modeMap[mode];

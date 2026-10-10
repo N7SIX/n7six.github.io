@@ -4,17 +4,16 @@ GLOBALIS Ⓖ co-founder/CTO
 
 Web, Security, Performance, Apple  Addict, Geek Life, Astronomy, Ham Radio Operator N7SIX & RRF Admin, Nature, Fly Fishing and more.
 
-
 # n7six.github.io
 
 ## Setup
 
 1. **Install Ruby and Bundler:**
-	- `gem install bundler`
+   - `gem install bundler`
 2. **Install Jekyll dependencies:**
-	- `bundle install`
+   - `bundle install`
 3. **Install Node.js dependencies:**
-	- `npm install`
+   - `npm install`
 
 ## Local Development
 

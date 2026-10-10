@@ -1,12 +1,12 @@
 ---
 layout: post
-title: "Wordpress manque encore de maturité !"
+title: 'Wordpress manque encore de maturité !'
 author: Armel
 categories: reflexion
 tags:
-- réflexion
-- wordpress
-- php
+  - réflexion
+  - wordpress
+  - php
 ---
 
 L’année 2015 sera particulière pour le langage PHP pour au moins 2 raisons. L’automne devrait être marqué par la sortie de PHP 7. Mais d’ici là, PHP fête aussi ses 20 ans ! C’est en effet le 8 juin 1995 que le code source du langage a été rendu public. Si la légitimité et la pertinence de ce langage ne sont plus à démontrer, PHP servant à dynamiser plus de 80% du Web mondial, cette réussite était pourtant loin d’être acquise. Pendant de nombreuses années, il aura fallu évangéliser, expliquer, convaincre, énormément travailler et apprendre également, tout ceci dans un unique but: professionnaliser l’écosystème autour de PHP dans l’espoir d’en faire une alternative crédible et mature. Et quel chemin parcouru !
@@ -18,4 +18,3 @@ Pendant longtemps, PHP a trainé une réputation de langage pour amateurs, tout 
 À mes yeux, Wordpress suit globalement le même cheminement chaotique. Il traine l’image de moteur de blog alors qu’il s’agit d’une réelle plate-forme de développement capable de servir de socle à des projets très ambitieux comportant des règles métiers complexes, des workflows pointus, etc. Une réputation qui sera difficile à gommer, comme ce fut le cas pour PHP à ses débuts. On lui reproche également souvent la qualité de son code. L’actualité autour des failles de sécurité est riche et fait toujours énormément de bruit. Le plus souvent, ces failles sont imputables à des maladresses provenant d’un plugin externe écrit n’importe comment. Là encore, comme ce fût le cas avec PHP, l'apparente facilité de Wordpress n’est qu’une façade. Enormément d’apprentis développeurs se lance dans Wordpress motivé par la relative simplicité à pouvoir créer des choses rapidement avec. Dans les faits, les mêmes causes engendrent les mêmes effets. Pas de surprise.
 
 Wordpress attendra la maturité le jour ou il se sera professionnalisé, que les bonnes pratiques seront assimilées par la majorité, que les outils se seront étoffés. À mon sens, WP CLI par exemple, s’inscrit totalement dans ce sens. Et c’est une très bonne chose. Mais il reste encore tant à faire. Par exemple, il conviendrait d’éviter de continuer à vendre du rêve affirmant que Wordpress est simple à maitriser. Oui, la courbe d’apprentissage est excellente. Mais non, Wordpress reste une plate-forme complexe n’offrant aucune place à l’improvisation.
- 

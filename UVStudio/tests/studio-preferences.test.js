@@ -10,7 +10,7 @@ function loadPreferences(localStorage) {
   const context = { localStorage, window: {} };
   const source = fs.readFileSync(
     path.join(__dirname, '..', 'js', 'studio-preferences.js'),
-    'utf8'
+    'utf8',
   );
   vm.runInNewContext(source, context);
   return context.window.UVStudioPreferences;
@@ -19,9 +19,15 @@ function loadPreferences(localStorage) {
 test('persists values when localStorage is available', () => {
   const values = new Map();
   const preferences = loadPreferences({
-    getItem(key) { return values.has(key) ? values.get(key) : null; },
-    setItem(key, value) { values.set(key, value); },
-    removeItem(key) { values.delete(key); }
+    getItem(key) {
+      return values.has(key) ? values.get(key) : null;
+    },
+    setItem(key, value) {
+      values.set(key, value);
+    },
+    removeItem(key) {
+      values.delete(key);
+    },
   });
 
   assert.equal(preferences.get('theme', 'light'), 'light');
@@ -34,9 +40,15 @@ test('persists values when localStorage is available', () => {
 test('falls back to session memory when storage access is denied', () => {
   const denied = new Error('storage denied');
   const preferences = loadPreferences({
-    getItem() { throw denied; },
-    setItem() { throw denied; },
-    removeItem() { throw denied; }
+    getItem() {
+      throw denied;
+    },
+    setItem() {
+      throw denied;
+    },
+    removeItem() {
+      throw denied;
+    },
   });
 
   assert.equal(preferences.get('kbdModel', 'K1'), 'K1');

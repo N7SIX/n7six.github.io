@@ -20,12 +20,12 @@ function loadController() {
     window: {
       dispatchEvent(event) {
         events.push(event);
-      }
-    }
+      },
+    },
   };
   const source = fs.readFileSync(
     path.join(__dirname, '..', 'js', 'studio-serial.js'),
-    'utf8'
+    'utf8',
   );
   vm.runInNewContext(source, context);
   return { controller: context.window.UVStudioSerial, events };
@@ -37,12 +37,12 @@ test('hands the serial owner over only after the previous client disconnects', a
   const viewer = controller.register('viewer', {
     async disconnect({ reason }) {
       calls.push(`viewer:${reason}`);
-    }
+    },
   });
   const tools = controller.register('tools', {
     async disconnect({ reason }) {
       calls.push(`tools:${reason}`);
-    }
+    },
   });
 
   await viewer.acquire();
@@ -64,7 +64,7 @@ test('allows only one operation and exposes its critical state to navigation', (
   assert.equal(controller.isNavigationBlocked(), true);
   assert.deepEqual(
     JSON.parse(JSON.stringify(controller.getSnapshot().operation)),
-    { owner: 'tools', name: 'flash-firmware', critical: true }
+    { owner: 'tools', name: 'flash-firmware', critical: true },
   );
 
   assert.equal(tools.endOperation(token), true);
@@ -76,7 +76,9 @@ test('does not hand the port to another client while an operation is active', as
   const { controller } = loadController();
   let disconnected = false;
   const tools = controller.register('tools', {
-    async disconnect() { disconnected = true; }
+    async disconnect() {
+      disconnected = true;
+    },
   });
   const viewer = controller.register('viewer');
 
@@ -94,7 +96,9 @@ test('global disconnect releases whichever client holds the port', async () => {
   const { controller } = loadController();
   const calls = [];
   const tools = controller.register('tools', {
-    async disconnect({ reason }) { calls.push(`tools:${reason}`); }
+    async disconnect({ reason }) {
+      calls.push(`tools:${reason}`);
+    },
   });
 
   await tools.acquire();
@@ -110,7 +114,9 @@ test('global disconnect is refused while an operation is active', async () => {
   const { controller } = loadController();
   let disconnected = false;
   const tools = controller.register('tools', {
-    async disconnect() { disconnected = true; }
+    async disconnect() {
+      disconnected = true;
+    },
   });
 
   await tools.acquire();
@@ -138,16 +144,26 @@ test('closes streams in order and always releases both locks', async () => {
   const calls = [];
   const error = await controller.closeResources({
     reader: {
-      async cancel() { calls.push('reader.cancel'); },
-      releaseLock() { calls.push('reader.releaseLock'); }
+      async cancel() {
+        calls.push('reader.cancel');
+      },
+      releaseLock() {
+        calls.push('reader.releaseLock');
+      },
     },
     writer: {
-      async close() { calls.push('writer.close'); },
-      releaseLock() { calls.push('writer.releaseLock'); }
+      async close() {
+        calls.push('writer.close');
+      },
+      releaseLock() {
+        calls.push('writer.releaseLock');
+      },
     },
     port: {
-      async close() { calls.push('port.close'); }
-    }
+      async close() {
+        calls.push('port.close');
+      },
+    },
   });
 
   assert.equal(error, null);
@@ -156,7 +172,7 @@ test('closes streams in order and always releases both locks', async () => {
     'reader.releaseLock',
     'writer.close',
     'writer.releaseLock',
-    'port.close'
+    'port.close',
   ]);
 });
 
@@ -166,16 +182,28 @@ test('still releases locks and closes the port after stream errors', async () =>
   const expected = new Error('cancel failed');
   const error = await controller.closeResources({
     reader: {
-      async cancel() { calls.push('reader.cancel'); throw expected; },
-      releaseLock() { calls.push('reader.releaseLock'); }
+      async cancel() {
+        calls.push('reader.cancel');
+        throw expected;
+      },
+      releaseLock() {
+        calls.push('reader.releaseLock');
+      },
     },
     writer: {
-      async close() { calls.push('writer.close'); throw new Error('close failed'); },
-      releaseLock() { calls.push('writer.releaseLock'); }
+      async close() {
+        calls.push('writer.close');
+        throw new Error('close failed');
+      },
+      releaseLock() {
+        calls.push('writer.releaseLock');
+      },
     },
     port: {
-      async close() { calls.push('port.close'); }
-    }
+      async close() {
+        calls.push('port.close');
+      },
+    },
   });
 
   assert.equal(error, expected);
@@ -184,6 +212,6 @@ test('still releases locks and closes the port after stream errors', async () =>
     'reader.releaseLock',
     'writer.close',
     'writer.releaseLock',
-    'port.close'
+    'port.close',
   ]);
 });

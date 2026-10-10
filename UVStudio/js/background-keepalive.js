@@ -20,17 +20,32 @@
         const entry = callbacks.get(id);
         if (!entry) return;
         if (!entry.repeat) callbacks.delete(id);
-        try { entry.fn(...entry.args); } catch (e) { console.error(e); }
+        try {
+          entry.fn(...entry.args);
+        } catch (e) {
+          console.error(e);
+        }
       };
-      worker.onerror = () => { workerOk = false; };
+      worker.onerror = () => {
+        workerOk = false;
+      };
 
       const schedule = (repeat, fn, delay, args) => {
         if (typeof fn !== 'function' || !workerOk) {
-          return (repeat ? nativeSetInterval : nativeSetTimeout)(fn, delay, ...args);
+          return (repeat ? nativeSetInterval : nativeSetTimeout)(
+            fn,
+            delay,
+            ...args,
+          );
         }
         const id = 'w' + nextId++;
         callbacks.set(id, { fn, args, repeat });
-        worker.postMessage({ cmd: 'start', id, delay: Math.max(0, Number(delay) || 0), repeat });
+        worker.postMessage({
+          cmd: 'start',
+          id,
+          delay: Math.max(0, Number(delay) || 0),
+          repeat,
+        });
         return id;
       };
       const cancel = (id, native) => {
@@ -42,10 +57,12 @@
         }
       };
 
-      window.setTimeout = (fn, delay, ...args) => schedule(false, fn, delay, args);
-      window.setInterval = (fn, delay, ...args) => schedule(true, fn, delay, args);
-      window.clearTimeout = id => cancel(id, nativeClearTimeout);
-      window.clearInterval = id => cancel(id, nativeClearInterval);
+      window.setTimeout = (fn, delay, ...args) =>
+        schedule(false, fn, delay, args);
+      window.setInterval = (fn, delay, ...args) =>
+        schedule(true, fn, delay, args);
+      window.clearTimeout = (id) => cancel(id, nativeClearTimeout);
+      window.clearInterval = (id) => cancel(id, nativeClearInterval);
     } catch (e) {
       console.warn('Background timer worker unavailable:', e);
     }
@@ -53,16 +70,27 @@
 
   // Held for the lifetime of the page.
   if (navigator.locks && navigator.locks.request) {
-    navigator.locks.request('uvstudio-active', () => new Promise(() => {})).catch(() => {});
+    navigator.locks
+      .request('uvstudio-active', () => new Promise(() => {}))
+      .catch(() => {});
   }
 
   let wakeLock = null;
   const acquireWakeLock = async () => {
-    if (!navigator.wakeLock || wakeLock || document.visibilityState !== 'visible') return;
+    if (
+      !navigator.wakeLock ||
+      wakeLock ||
+      document.visibilityState !== 'visible'
+    )
+      return;
     try {
       wakeLock = await navigator.wakeLock.request('screen');
-      wakeLock.addEventListener('release', () => { wakeLock = null; });
-    } catch (e) { /* denied or unsupported */ }
+      wakeLock.addEventListener('release', () => {
+        wakeLock = null;
+      });
+    } catch (e) {
+      /* denied or unsupported */
+    }
   };
   acquireWakeLock();
   document.addEventListener('visibilitychange', acquireWakeLock);

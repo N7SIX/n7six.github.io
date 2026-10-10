@@ -1,0 +1,34 @@
+# Prettier should only check real source files.
+# Jekyll/Liquid templates confuse the HTML parser, and vendored/minified
+# assets should never block CI.
+_site/
+.jekyll-cache/
+vendor/
+node_modules/
+*.min.js
+*.min.css
+js/jquery.min.js
+js/jquery.poptrox.min.js
+js/skel.min.js
+js/init.js
+uvtools/fonts/
+uvtools/css/sb-admin-2.min.css
+k5viewer/
+css/style*.css
+sass/
+index.html
+astrobin.html
+_layouts/
+_posts/
+_drafts/
+tags.html
+palette-preview.html
+palette-quansheng.html
+uvtools/index.html
+UVTools/index.html
+uvstudio/index.html
+UVStudio/index.html
+uvtools2/index.html
+Gemfile.lock
+package-lock.json
+_site/

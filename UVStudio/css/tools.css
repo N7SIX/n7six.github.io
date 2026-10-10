@@ -53,7 +53,9 @@
 #pane-tools .action-tab.btn.active {
   border-color: #00b96b;
   background: linear-gradient(160deg, #00ce7c 0%, #00b96b 100%);
-  box-shadow: 0 2px 6px rgba(0,206,124,0.3), inset 0 1px 0 rgba(255,255,255,0.2);
+  box-shadow:
+    0 2px 6px rgba(0, 206, 124, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
   color: #001a10;
 }
 
@@ -61,7 +63,7 @@
   display: none;
 }
 
-[data-theme="dark"] #pane-tools .action-tab.btn.active {
+[data-theme='dark'] #pane-tools .action-tab.btn.active {
   border-color: #00ce7c;
   background: linear-gradient(135deg, #00b96b, #00ce7c);
   color: #001a10;
@@ -87,7 +89,7 @@
   font-size: 14px;
 }
 
-#pane-tools input[type="text"] {
+#pane-tools input[type='text'] {
   width: 100%;
   padding: 12px;
   border: 1px solid var(--border);
@@ -98,7 +100,7 @@
   transition: border-color 0.15s;
 }
 
-#pane-tools input[type="text"]:focus {
+#pane-tools input[type='text']:focus {
   border-color: var(--accent);
 }
 
@@ -108,7 +110,7 @@
   width: 100%;
 }
 
-#pane-tools input[type="file"] {
+#pane-tools input[type='file'] {
   position: absolute;
   opacity: 0;
   width: 100%;
@@ -133,7 +135,7 @@
   border-color: var(--accent);
 }
 
-#pane-tools input[type="file"]:focus-visible + .file-input-label {
+#pane-tools input[type='file']:focus-visible + .file-input-label {
   outline: 3px solid var(--focus-ring);
   outline-offset: 3px;
 }
@@ -161,7 +163,9 @@
   border-radius: 6px;
   font-size: 13px;
   font-weight: 600;
-  box-shadow: 0 2px 6px rgba(0,206,124,0.35), inset 0 1px 0 rgba(255,255,255,0.2);
+  box-shadow:
+    0 2px 6px rgba(0, 206, 124, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
   white-space: nowrap;
 }
 
@@ -244,7 +248,7 @@
 
 #pane-tools .catalog-or::before,
 #pane-tools .catalog-or::after {
-  content: "";
+  content: '';
   flex: 1;
   height: 1px;
   background: var(--border);
@@ -268,19 +272,23 @@
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s;
-  box-shadow: 0 2px 8px rgba(0,206,124,0.35), inset 0 1px 0 rgba(255,255,255,0.2);
+  box-shadow:
+    0 2px 8px rgba(0, 206, 124, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 #pane-tools button:not(.log-toggle):not(.btn):hover:not(:disabled) {
   background: linear-gradient(160deg, #00e88c 0%, #00ce7c 100%);
   border-color: #00ce7c;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0,206,124,0.45), inset 0 1px 0 rgba(255,255,255,0.25);
+  box-shadow:
+    0 4px 12px rgba(0, 206, 124, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 
 #pane-tools button:not(.log-toggle):not(.btn):active:not(:disabled) {
   transform: translateY(1px);
-  box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 #pane-tools button:disabled {
@@ -289,13 +297,19 @@
   transform: none;
 }
 
-[data-theme="dark"] #pane-tools button:not(.log-toggle):not(.btn) {
+[data-theme='dark'] #pane-tools button:not(.log-toggle):not(.btn) {
   background: linear-gradient(135deg, #00b96b, #00ce7c);
-  box-shadow: 0 2px 8px rgba(0,232,140,0.4), inset 0 1px 0 rgba(255,255,255,0.15);
+  box-shadow:
+    0 2px 8px rgba(0, 232, 140, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
 }
-[data-theme="dark"] #pane-tools button:not(.log-toggle):not(.btn):hover:not(:disabled) {
+[data-theme='dark']
+  #pane-tools
+  button:not(.log-toggle):not(.btn):hover:not(:disabled) {
   background: linear-gradient(135deg, #00ce7c, #00e88c);
-  box-shadow: 0 4px 12px rgba(0,232,140,0.5), inset 0 1px 0 rgba(255,255,255,0.2);
+  box-shadow:
+    0 4px 12px rgba(0, 232, 140, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 /* Focus: no halo — the select's border turns blue on focus (via core.css),
@@ -332,7 +346,7 @@
   font-weight: 600;
   font-size: 13px;
   color: #ffffff;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.25);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
   pointer-events: none;
 }
 
@@ -503,7 +517,7 @@
   border-radius: var(--radius);
 }
 
-#pane-tools .logo-controls input[type="range"] {
+#pane-tools .logo-controls input[type='range'] {
   width: 100%;
   accent-color: var(--accent);
   cursor: pointer;
@@ -518,7 +532,7 @@
   margin-bottom: 0;
 }
 
-#pane-tools .logo-checkbox-label input[type="checkbox"] {
+#pane-tools .logo-checkbox-label input[type='checkbox'] {
   accent-color: var(--accent);
   cursor: pointer;
   width: 18px;
@@ -658,8 +672,8 @@
 #pane-tools .slots-table .update-current[hidden] {
   display: none;
 }
-[data-theme="dark"] #pane-tools .slots-table button.app-update-button,
-[data-theme="dark"] #pane-tools .slots-table button.slot-update-button {
+[data-theme='dark'] #pane-tools .slots-table button.app-update-button,
+[data-theme='dark'] #pane-tools .slots-table button.slot-update-button {
   color: #00e88c;
   background: transparent;
   box-shadow: none;
@@ -672,8 +686,14 @@
   transform: none;
   box-shadow: none;
 }
-[data-theme="dark"] #pane-tools .slots-table button.app-update-button:hover:not(:disabled),
-[data-theme="dark"] #pane-tools .slots-table button.slot-update-button:hover:not(:disabled) {
+[data-theme='dark']
+  #pane-tools
+  .slots-table
+  button.app-update-button:hover:not(:disabled),
+[data-theme='dark']
+  #pane-tools
+  .slots-table
+  button.slot-update-button:hover:not(:disabled) {
   color: #7cebbb;
 }
 #pane-tools .slots-table .app-update-button[hidden],
@@ -719,8 +739,14 @@
   border: 1px solid color-mix(in oklab, var(--error) 55%, var(--border));
   box-shadow: none;
 }
-#pane-tools .slots-table .slot-actions button.slot-act-erase:hover:not(:disabled),
-#pane-tools .slots-table .slot-actions button.app-act-delete:hover:not(:disabled) {
+#pane-tools
+  .slots-table
+  .slot-actions
+  button.slot-act-erase:hover:not(:disabled),
+#pane-tools
+  .slots-table
+  .slot-actions
+  button.app-act-delete:hover:not(:disabled) {
   background: color-mix(in oklab, var(--error) 12%, transparent);
   border-color: var(--error);
   transform: none;
@@ -739,7 +765,10 @@
   border: 1px solid var(--border);
   box-shadow: none;
 }
-#pane-tools .slots-table .slot-actions button.slot-act-reset:hover:not(:disabled) {
+#pane-tools
+  .slots-table
+  .slot-actions
+  button.slot-act-reset:hover:not(:disabled) {
   background: color-mix(in oklab, var(--text-muted) 12%, transparent);
   border-color: var(--text-muted);
   transform: none;

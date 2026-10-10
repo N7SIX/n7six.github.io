@@ -6,6 +6,7 @@
     "lint:js": "eslint uvtools2/js/*.js",
     "lint:css": "stylelint 'css/style*.css'",
     "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "test:uv": "node --test UVStudio/tests/*.test.js uvtools2/tests/*.test.js",
     "test:core": "node --test UVStudio/tests/core-contract.test.js UVStudio/tests/core-performance.test.js"
   },

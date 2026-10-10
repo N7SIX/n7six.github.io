@@ -1,92 +1,362 @@
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex">
-<title>Quansheng-inspired Palette — Light + Dark</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-    background: #14161a; color: #e6e8eb; line-height: 1.5; padding: 32px 20px 64px;
-  }
-  .wrap { max-width: 1180px; margin: 0 auto; }
-  h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.01em; }
-  .lede { color: #9aa0a6; font-size: 14px; margin: 6px 0 8px; max-width: 760px; }
-  .src { color: #6b7280; font-size: 12.5px; margin-bottom: 28px; }
-  .src code, .lede code { background:#22252b; padding:1px 6px; border-radius:4px; color:#00ce7c; }
-  .pal { margin-bottom: 36px; border: 1px solid #2a2e35; border-radius: 14px; overflow: hidden; }
-  .pal-head { padding: 16px 20px; background: #1b1e24; border-bottom: 1px solid #2a2e35; }
-  .pal-head h2 { font-size: 17px; font-weight: 700; }
-  .pal-head p { color: #9aa0a6; font-size: 13px; margin-top: 2px; }
-  .themes { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
-  @media (max-width: 860px) { .themes { grid-template-columns: 1fr; } }
-  .theme { padding: 20px; }
-  .theme + .theme { border-left: 1px solid #2a2e35; }
-  @media (max-width: 860px) { .theme + .theme { border-left: none; border-top: 1px solid #2a2e35; } }
-  .theme-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.6; margin-bottom: 14px; }
-  .frame { border-radius: 12px; overflow: hidden; border: 1px solid var(--border); }
-  .bar { display: flex; align-items: center; gap: 12px; height: 52px; padding: 0 16px; background: var(--surface); border-bottom: 1px solid var(--border); }
-  .logo { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; color: #001a10; font-weight: 800; font-size: 13px; background: var(--accent); }
-  .bar-title { font-weight: 700; font-size: 14px; color: var(--text); }
-  .bar-title b { color: var(--accent); }
-  .bar-sub { font-size: 10px; color: var(--text-muted); }
-  .bar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; font-size: 11px; font-weight: 650; border: 1px solid var(--border); background: color-mix(in oklab, var(--text-muted) 8%, var(--surface)); color: var(--text-secondary); }
-  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); }
-  .shell { display: flex; min-height: 210px; background: var(--bg); }
-  .side { flex: 0 0 190px; padding: 14px 10px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 4px; }
-  .nav { padding: 8px 10px; border-radius: 7px; font-size: 12.5px; font-weight: 600; color: var(--text-secondary); }
-  .nav.active { background: var(--accent); color: var(--on-accent); }
-  .grp { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); padding: 8px 10px 2px; }
-  .main { flex: 1; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
-  .card h3 { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
-  .card p { font-size: 12px; color: var(--text-secondary); }
-  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 34px; padding: 0 14px; border-radius: 8px; font-size: 12.5px; font-weight: 650; cursor: default; }
-  .btn.primary { background: var(--accent); border: 1px solid var(--accent); color: var(--on-accent); }
-  .btn.ghost { background: var(--surface); border: 1px solid var(--border); color: var(--text); }
-  .btn.danger { background: var(--error); border: 1px solid var(--error); color: #fff; }
-  .status { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 650; padding: 5px 10px; border-radius: 999px; }
-  .st-ok { color: var(--success); border: 1px solid color-mix(in oklab, var(--success) 36%, var(--border)); background: color-mix(in oklab, var(--success) 10%, var(--surface)); }
-  .st-warn { color: var(--warn); border: 1px solid color-mix(in oklab, var(--warn) 38%, var(--border)); background: color-mix(in oklab, var(--warn) 10%, var(--surface)); }
-  .swatches { display: flex; gap: 6px; margin-top: 14px; flex-wrap: wrap; }
-  .sw { width: 50px; height: 34px; border-radius: 6px; border: 1px solid rgba(128,128,128,0.35); display: grid; place-items: end center; font-size: 8px; font-weight: 700; padding-bottom: 2px; }
-  .keys { display: flex; gap: 5px; flex-wrap: wrap; }
-  .key { width: 30px; height: 26px; border-radius: 5px; font-size: 11px; font-weight: 700; display: grid; place-items: center; border: 1px solid var(--border); }
-</style>
-</head>
-<body>
-<div class="wrap">
-  <h1>Quansheng-inspired Palette — Light + Dark</h1>
-  <p class="lede">Left = the <b>actual light palette</b> extracted from <code>qsfj.com</code> (Fujian Quansheng Electronics). Right = my proposed <b>dark mode</b> of that same palette, tuned so the vivid brand green <code>#00ce7c</code> stays readable on deep charcoal.</p>
-  <p class="src">Source brand green <code>#00ce7c</code> · light bg <code>#eee / #f7f8fb</code> · surface <code>#fff</code> · text <code>#1f2023 / #4d4d4d</code> · border <code>#dadada</code></p>
-  <div id="palettes"></div>
-</div>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Quansheng-inspired Palette — Light + Dark</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+        background: #14161a;
+        color: #e6e8eb;
+        line-height: 1.5;
+        padding: 32px 20px 64px;
+      }
+      .wrap {
+        max-width: 1180px;
+        margin: 0 auto;
+      }
+      h1 {
+        font-size: 24px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+      .lede {
+        color: #9aa0a6;
+        font-size: 14px;
+        margin: 6px 0 8px;
+        max-width: 760px;
+      }
+      .src {
+        color: #6b7280;
+        font-size: 12.5px;
+        margin-bottom: 28px;
+      }
+      .src code,
+      .lede code {
+        background: #22252b;
+        padding: 1px 6px;
+        border-radius: 4px;
+        color: #00ce7c;
+      }
+      .pal {
+        margin-bottom: 36px;
+        border: 1px solid #2a2e35;
+        border-radius: 14px;
+        overflow: hidden;
+      }
+      .pal-head {
+        padding: 16px 20px;
+        background: #1b1e24;
+        border-bottom: 1px solid #2a2e35;
+      }
+      .pal-head h2 {
+        font-size: 17px;
+        font-weight: 700;
+      }
+      .pal-head p {
+        color: #9aa0a6;
+        font-size: 13px;
+        margin-top: 2px;
+      }
+      .themes {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0;
+      }
+      @media (max-width: 860px) {
+        .themes {
+          grid-template-columns: 1fr;
+        }
+      }
+      .theme {
+        padding: 20px;
+      }
+      .theme + .theme {
+        border-left: 1px solid #2a2e35;
+      }
+      @media (max-width: 860px) {
+        .theme + .theme {
+          border-left: none;
+          border-top: 1px solid #2a2e35;
+        }
+      }
+      .theme-label {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        opacity: 0.6;
+        margin-bottom: 14px;
+      }
+      .frame {
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid var(--border);
+      }
+      .bar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        height: 52px;
+        padding: 0 16px;
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+      }
+      .logo {
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        display: grid;
+        place-items: center;
+        color: #001a10;
+        font-weight: 800;
+        font-size: 13px;
+        background: var(--accent);
+      }
+      .bar-title {
+        font-weight: 700;
+        font-size: 14px;
+        color: var(--text);
+      }
+      .bar-title b {
+        color: var(--accent);
+      }
+      .bar-sub {
+        font-size: 10px;
+        color: var(--text-muted);
+      }
+      .bar-right {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 10px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 650;
+        border: 1px solid var(--border);
+        background: color-mix(in oklab, var(--text-muted) 8%, var(--surface));
+        color: var(--text-secondary);
+      }
+      .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--success);
+      }
+      .shell {
+        display: flex;
+        min-height: 210px;
+        background: var(--bg);
+      }
+      .side {
+        flex: 0 0 190px;
+        padding: 14px 10px;
+        background: var(--surface);
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .nav {
+        padding: 8px 10px;
+        border-radius: 7px;
+        font-size: 12.5px;
+        font-weight: 600;
+        color: var(--text-secondary);
+      }
+      .nav.active {
+        background: var(--accent);
+        color: var(--on-accent);
+      }
+      .grp {
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--text-muted);
+        padding: 8px 10px 2px;
+      }
+      .main {
+        flex: 1;
+        padding: 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 14px;
+      }
+      .card h3 {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--text);
+        margin-bottom: 4px;
+      }
+      .card p {
+        font-size: 12px;
+        color: var(--text-secondary);
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        height: 34px;
+        padding: 0 14px;
+        border-radius: 8px;
+        font-size: 12.5px;
+        font-weight: 650;
+        cursor: default;
+      }
+      .btn.primary {
+        background: var(--accent);
+        border: 1px solid var(--accent);
+        color: var(--on-accent);
+      }
+      .btn.ghost {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        color: var(--text);
+      }
+      .btn.danger {
+        background: var(--error);
+        border: 1px solid var(--error);
+        color: #fff;
+      }
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11.5px;
+        font-weight: 650;
+        padding: 5px 10px;
+        border-radius: 999px;
+      }
+      .st-ok {
+        color: var(--success);
+        border: 1px solid color-mix(in oklab, var(--success) 36%, var(--border));
+        background: color-mix(in oklab, var(--success) 10%, var(--surface));
+      }
+      .st-warn {
+        color: var(--warn);
+        border: 1px solid color-mix(in oklab, var(--warn) 38%, var(--border));
+        background: color-mix(in oklab, var(--warn) 10%, var(--surface));
+      }
+      .swatches {
+        display: flex;
+        gap: 6px;
+        margin-top: 14px;
+        flex-wrap: wrap;
+      }
+      .sw {
+        width: 50px;
+        height: 34px;
+        border-radius: 6px;
+        border: 1px solid rgba(128, 128, 128, 0.35);
+        display: grid;
+        place-items: end center;
+        font-size: 8px;
+        font-weight: 700;
+        padding-bottom: 2px;
+      }
+      .keys {
+        display: flex;
+        gap: 5px;
+        flex-wrap: wrap;
+      }
+      .key {
+        width: 30px;
+        height: 26px;
+        border-radius: 5px;
+        font-size: 11px;
+        font-weight: 700;
+        display: grid;
+        place-items: center;
+        border: 1px solid var(--border);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Quansheng-inspired Palette — Light + Dark</h1>
+      <p class="lede">
+        Left = the <b>actual light palette</b> extracted from
+        <code>qsfj.com</code> (Fujian Quansheng Electronics). Right = my
+        proposed <b>dark mode</b> of that same palette, tuned so the vivid brand
+        green <code>#00ce7c</code> stays readable on deep charcoal.
+      </p>
+      <p class="src">
+        Source brand green <code>#00ce7c</code> · light bg
+        <code>#eee / #f7f8fb</code> · surface <code>#fff</code> · text
+        <code>#1f2023 / #4d4d4d</code> · border <code>#dadada</code>
+      </p>
+      <div id="palettes"></div>
+    </div>
 
-<script>
-const THEMES = {
-  light: {
-    label: 'Quansheng Light (from qsfj.com)',
-    bg:'#f7f8fb', surface:'#ffffff', border:'#dadada', text:'#1f2023',
-    textSecondary:'#4d4d4d', textMuted:'#82848a', accent:'#00ce7c',
-    accentHover:'#00b96b', success:'#00ce7c', error:'#f56c6c', warn:'#e6a23c',
-    onAccent:'#001a10', mode:'light'
-  },
-  dark: {
-    label: 'Quansheng Dark (proposed)',
-    bg:'#14161a', surface:'#1c1f24', border:'#2f333a', text:'#ecedef',
-    textSecondary:'#a6adb5', textMuted:'#6b7280', accent:'#00e88c',
-    accentHover:'#3af0a4', success:'#00e88c', error:'#ff6b6b', warn:'#f0c05a',
-    onAccent:'#001a10', mode:'dark'
-  }
-};
-function vars(t){ return `--bg:${t.bg};--surface:${t.surface};--border:${t.border};--text:${t.text};--text-secondary:${t.textSecondary};--text-muted:${t.textMuted};--accent:${t.accent};--accent-hover:${t.accentHover};--success:${t.success};--error:${t.error};--warn:${t.warn};--on-accent:${t.onAccent};`; }
-function frame(mode, t){
-  const key = `color:${t.accent};border-color:color-mix(in oklab,${t.accent} 40%,${t.border});background:color-mix(in oklab,${t.accent} ${mode==='dark'?12:9}%,${t.surface});`;
-  return `
+    <script>
+      const THEMES = {
+        light: {
+          label: 'Quansheng Light (from qsfj.com)',
+          bg: '#f7f8fb',
+          surface: '#ffffff',
+          border: '#dadada',
+          text: '#1f2023',
+          textSecondary: '#4d4d4d',
+          textMuted: '#82848a',
+          accent: '#00ce7c',
+          accentHover: '#00b96b',
+          success: '#00ce7c',
+          error: '#f56c6c',
+          warn: '#e6a23c',
+          onAccent: '#001a10',
+          mode: 'light',
+        },
+        dark: {
+          label: 'Quansheng Dark (proposed)',
+          bg: '#14161a',
+          surface: '#1c1f24',
+          border: '#2f333a',
+          text: '#ecedef',
+          textSecondary: '#a6adb5',
+          textMuted: '#6b7280',
+          accent: '#00e88c',
+          accentHover: '#3af0a4',
+          success: '#00e88c',
+          error: '#ff6b6b',
+          warn: '#f0c05a',
+          onAccent: '#001a10',
+          mode: 'dark',
+        },
+      };
+      function vars(t) {
+        return `--bg:${t.bg};--surface:${t.surface};--border:${t.border};--text:${t.text};--text-secondary:${t.textSecondary};--text-muted:${t.textMuted};--accent:${t.accent};--accent-hover:${t.accentHover};--success:${t.success};--error:${t.error};--warn:${t.warn};--on-accent:${t.onAccent};`;
+      }
+      function frame(mode, t) {
+        const key = `color:${t.accent};border-color:color-mix(in oklab,${t.accent} 40%,${t.border});background:color-mix(in oklab,${t.accent} ${mode === 'dark' ? 12 : 9}%,${t.surface});`;
+        return `
   <div class="frame">
     <div class="bar"><div class="logo">泉</div><div><div class="bar-title">UV <b>Studio</b></div><div class="bar-sub">v7.6.0</div></div>
       <div class="bar-right"><span class="pill"><span class="dot"></span>Connected</span></div></div>
@@ -123,17 +393,16 @@ function frame(mode, t){
     <div class="sw" style="background:${t.error};color:#fff;">err</div>
     <div class="sw" style="background:${t.warn};color:#1a1200;">warn</div>
   </div>`;
-}
-document.getElementById('palettes').innerHTML = `
+      }
+      document.getElementById('palettes').innerHTML = `
   <section class="pal">
     <div class="pal-head"><h2>Quansheng Green — Light (source) vs Dark (proposed)</h2>
       <p>Same brand identity, inverted for a comfortable dark workspace.</p></div>
     <div class="themes">
-      <div class="theme" data-mode="light" style="${vars(THEMES.light)}"><div class="theme-label">${THEMES.light.label}</div>${frame('light',THEMES.light)}</div>
-      <div class="theme" data-mode="dark" style="${vars(THEMES.dark)}"><div class="theme-label">${THEMES.dark.label}</div>${frame('dark',THEMES.dark)}</div>
+      <div class="theme" data-mode="light" style="${vars(THEMES.light)}"><div class="theme-label">${THEMES.light.label}</div>${frame('light', THEMES.light)}</div>
+      <div class="theme" data-mode="dark" style="${vars(THEMES.dark)}"><div class="theme-label">${THEMES.dark.label}</div>${frame('dark', THEMES.dark)}</div>
     </div>
   </section>`;
-</script>
-</body>
+    </script>
+  </body>
 </html>
-

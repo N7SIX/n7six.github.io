@@ -6,7 +6,10 @@ const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
 
-const source = fs.readFileSync(path.join(__dirname, '..', 'js', 'i18n.js'), 'utf8');
+const source = fs.readFileSync(
+  path.join(__dirname, '..', 'js', 'i18n.js'),
+  'utf8',
+);
 
 function createRuntime(initialStorage) {
   const storage = new Map(Object.entries(initialStorage));
@@ -15,7 +18,7 @@ function createRuntime(initialStorage) {
     value: '',
     addEventListener(type, listener) {
       listeners[type] = listener;
-    }
+    },
   };
   let updateCount = 0;
 
@@ -31,7 +34,7 @@ function createRuntime(initialStorage) {
       documentElement: { lang: 'en' },
       getElementById(id) {
         return id === 'languageSelect' ? languageSelect : null;
-      }
+      },
     },
     localStorage: {
       getItem(key) {
@@ -39,20 +42,20 @@ function createRuntime(initialStorage) {
       },
       setItem(key, value) {
         storage.set(key, String(value));
-      }
+      },
     },
     window: {
       UVTOOLS_LOCALES: {
         en: { sample: 'English' },
         fr: { sample: 'Français' },
-        de: { sample: 'Deutsch' }
+        de: { sample: 'Deutsch' },
       },
       dispatchEvent() {},
       addEventListener() {},
       updateUI() {
         updateCount++;
-      }
-    }
+      },
+    },
   };
 
   vm.createContext(context);
@@ -63,7 +66,7 @@ function createRuntime(initialStorage) {
     languageSelect,
     listeners,
     storage,
-    getUpdateCount: () => updateCount
+    getUpdateCount: () => updateCount,
   };
 }
 
@@ -80,7 +83,7 @@ test('migrates the former UVTools2 language preference to the shared key', async
 test('prefers and updates the language key shared with K5Viewer', async () => {
   const runtime = createRuntime({
     currentLanguage: 'de',
-    'uv-k5-flasher-lang': 'fr'
+    'uv-k5-flasher-lang': 'fr',
   });
   await runtime.context.window.i18nReady;
 

@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   lint-and-test:
@@ -22,7 +22,7 @@ jobs:
       - name: Lint CSS
         run: npm run lint:css
       - name: Format check
-        run: npm run format -- --check
+        run: npm run format:check
       - name: Run basic JS tests
         run: |
           npm install --save-dev mocha

@@ -1,16 +1,17 @@
 ---
 layout: post
-title: "Apache 2.4 et multiples versions de PHP en mode FPM"
+title: 'Apache 2.4 et multiples versions de PHP en mode FPM'
 author: Armel
 categories: sysadmin
 tags:
-- php
-- apache
-- slackware
+  - php
+  - apache
+  - slackware
 ---
+
 Ce billet explique comment déployer Apache 2.4 et de multiples versions de PHP en mode FPM (Fast Process Manager). L'idée est de tirer profit des dernières évolutions d'Apache, mais surtout, de pouvoir faire cohabiter les différentes versions de PHP simultanément, tout en profitant des performances remarquables de la SAPI FPM.
 
-Cette procédure a été testée et approuvée sur la distribution Slackware (13.37.0). J'utilise cette distribution depuis 1993. Donc, ne pas s'attendre à l'utilisation de commandes `apt-get` et autres `yum`. On va partir des sources d'Apache et de PHP, compiler et configurer l'ensemble, écrire des fichiers *rc*, etc. 
+Cette procédure a été testée et approuvée sur la distribution Slackware (13.37.0). J'utilise cette distribution depuis 1993. Donc, ne pas s'attendre à l'utilisation de commandes `apt-get` et autres `yum`. On va partir des sources d'Apache et de PHP, compiler et configurer l'ensemble, écrire des fichiers _rc_, etc.
 
 ## Installation d'Apache 2.4
 
@@ -41,7 +42,7 @@ $ make
 # => Compilation d'Apache en mode mpm_worker
 ```
 
-Apache propose plusieurs Modules Multi-Processus (MPM). Ici, j'ai choisi `worker`, mais il est possible d'opter pour `prefork` ou `event`. 
+Apache propose plusieurs Modules Multi-Processus (MPM). Ici, j'ai choisi `worker`, mais il est possible d'opter pour `prefork` ou `event`.
 
 ```
 $ './configure' \
@@ -61,7 +62,7 @@ $ make
 
 On peut maintenant installer Apache via la commande `make install`.
 
-Il reste alors à éditer le ficher *httpd.conf* et veiller à activer `LoadModule proxy_module modules/mod_proxy.so` et `LoadModule proxy_fcgi_module modules/mod_proxy_fcgi.so`. Ces modules seront essentiels pour utiliser PHP en mode FPM. En fonction des besoins, on peut aussi en profiter pour éditer les directives `DirectoryIndex`, `ServerName`, `Listen`, la prise en comptes des fichiers *.htaccess*, etc.
+Il reste alors à éditer le ficher _httpd.conf_ et veiller à activer `LoadModule proxy_module modules/mod_proxy.so` et `LoadModule proxy_fcgi_module modules/mod_proxy_fcgi.so`. Ces modules seront essentiels pour utiliser PHP en mode FPM. En fonction des besoins, on peut aussi en profiter pour éditer les directives `DirectoryIndex`, `ServerName`, `Listen`, la prise en comptes des fichiers _.htaccess_, etc.
 
 On peut alors démarrer Apache.
 
@@ -72,7 +73,7 @@ $ /usr/local/apache/bin/apachectl start
 
 ## Installation de PHP
 
-Nous allons maintenant installer différentes versions de PHP que nous ferons cohabiter ensemble. 
+Nous allons maintenant installer différentes versions de PHP que nous ferons cohabiter ensemble.
 
 ```
 $ wget http://fr2.php.net/get/php-7.0.5.tar.gz/from/this/mirror
@@ -97,7 +98,7 @@ $ make
 # => Compilation de PHP en mode FPM
 ```
 
-PHP est compilé ici en mode FPM. À noter les paramétrages `--prefix` et `--with-config-file-path`. Ils sont importants et vont permettre de parfaitement __isoler__ les différentes versions de PHP entre elles. On peut maintenant installer PHP via la commande `make install`.
+PHP est compilé ici en mode FPM. À noter les paramétrages `--prefix` et `--with-config-file-path`. Ils sont importants et vont permettre de parfaitement **isoler** les différentes versions de PHP entre elles. On peut maintenant installer PHP via la commande `make install`.
 
 Il reste encore quelques opérations de post-installation à effectuer.
 
@@ -115,7 +116,7 @@ $ cp php.ini-development /usr/local/php-70/php.ini
 # => Copie du fichier php.ini-development dans le répertoire d'installation
 ```
 
-On peut maintenant éditer le fichier *php.ini* placé dans le répertoire d'installation afin d'initialiser correctement quelques directives comme `extension_dir = /usr/local/php-70/extensions`, `date.timezone = Europe/Paris` ou encore charger le cache d'opcode en ajoutant `zend_extension = opcache.so`.
+On peut maintenant éditer le fichier _php.ini_ placé dans le répertoire d'installation afin d'initialiser correctement quelques directives comme `extension_dir = /usr/local/php-70/extensions`, `date.timezone = Europe/Paris` ou encore charger le cache d'opcode en ajoutant `zend_extension = opcache.so`.
 
 Il reste à dérouler la même procédure avec les différentes version de PHP que l'on désire faire cohabiter: PHP 5.5, PHP 5.6, etc. Il faut juste bien penser à isoler les différentes versions entre elles en jouant avec les paramétrages `--prefix` et `--with-config-file-path` lors de la compilation de PHP et bien cibler le bon répertoire d'installation dans la suite des opérations.
 
@@ -123,7 +124,7 @@ Il reste à dérouler la même procédure avec les différentes version de PHP q
 
 La configuration et le lancement des pools FPM passent par la mise en place de 2 fichiers.
 
-Par exemple pour PHP 7.0, un premier fichier que nous appelerons */etc/php-fpm-70.conf*, servira à la configuration.
+Par exemple pour PHP 7.0, un premier fichier que nous appelerons _/etc/php-fpm-70.conf_, servira à la configuration.
 
 ```
 [global]
@@ -145,7 +146,7 @@ chdir = /
 
 Bien noter encore ici le soin particulier apporté à l'isolation dans les chemins `pid` et `error_log`, mais aussi au niveau `listen` dans le choix du port réseau à écouter. Il conviendra d'adapter et affiner les autres paramétres en fonction de vos besoins.
 
-Un second fichier, que nous appelerons */etc/rc.d/rc.php-fpm-70*, servira à lancer le pool.
+Un second fichier, que nous appelerons _/etc/rc.d/rc.php-fpm-70_, servira à lancer le pool.
 
 ```
 #! /bin/sh
@@ -330,7 +331,7 @@ Et voilà, une fois encore, dérouler la même procédure avec les différentes 
 
 ## Un dernier mot sur la mise en oeuvre et la performance
 
-Afin d'activer le parseur de telle ou telle version de PHP, il suffit d'utiliser un simple fichier *.htaccess*. Par exemple, pour activer le parseur de PHP 7.0.
+Afin d'activer le parseur de telle ou telle version de PHP, il suffit d'utiliser un simple fichier _.htaccess_. Par exemple, pour activer le parseur de PHP 7.0.
 
 ```
 <FilesMatch \.php$>
@@ -338,8 +339,8 @@ Afin d'activer le parseur de telle ou telle version de PHP, il suffit d'utiliser
 </FilesMatch>
 ```
 
-On peut aussi ajouter ces précédentes lignes directement dans le *httpd.conf*, en global ou au niveau de tel ou tel *virtualhost*.
+On peut aussi ajouter ces précédentes lignes directement dans le _httpd.conf_, en global ou au niveau de tel ou tel _virtualhost_.
 
-Rappelons que l'utilisation de PHP en mode FPM implique d'avoir recours à un fichier *.user.ini* si l'on désire affiner les paramétrages de PHP dans tel ou tel répertoire.
+Rappelons que l'utilisation de PHP en mode FPM implique d'avoir recours à un fichier _.user.ini_ si l'on désire affiner les paramétrages de PHP dans tel ou tel répertoire.
 
 En terme de performance, à serveur constant, l'utilisation d'Apache 2.4 et de la SAPI FPM se montre de loin la combinaison la plus performante, comparativement à PHP en module ou en CGI. Cette combinaison fait également globalement jeu égal avec Nginx d'après mes observations et tests de montée en charge.

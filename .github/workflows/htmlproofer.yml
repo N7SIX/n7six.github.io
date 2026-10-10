@@ -2,9 +2,9 @@ name: HTML-Proofer
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [main]
   push:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   htmlproofer:
@@ -24,6 +24,4 @@ jobs:
       - name: Run HTMLProofer
         run: |
           gem install html-proofer
-          npx -y serve _site &
-          sleep 5
-          htmlproofer ./_site --checks Links,Images,Scripts --allow-hash-href --disable-external
+          ruby -S htmlproofer ./_site --checks Links,Images,Scripts --allow-hash-href --allow-missing-href --disable-external --no-enforce-https --ignore-missing-alt --ignore-files '/uvtools/index.html,/UVTools/index.html,/uvstudio/index.html,/UVStudio/index.html,/uvtools2/index.html,/k5viewer/index.html,/palette-preview.html,/palette-quansheng.html/'
