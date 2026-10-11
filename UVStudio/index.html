@@ -1577,12 +1577,69 @@
               </section>
               <section
                 class="section firmware-catalog app-catalog"
+                id="apexAppCatalogSection"
+                aria-labelledby="apexAppCatalogLabel"
+                hidden
+              >
+                <label
+                  id="apexAppCatalogLabel"
+                  data-i18n="apex_app_catalog_label"
+                  >Official N7SIX Overlay Apps</label
+                >
+                <div class="app-catalog-grid">
+                  <div>
+                    <label
+                      for="apexAppCatalogVersionSelect"
+                      data-i18n="app_catalog_version_label"
+                      >Firmware version</label
+                    >
+                    <select
+                      id="apexAppCatalogVersionSelect"
+                      class="firmware-catalog-select"
+                    >
+                      <option
+                        value=""
+                        disabled
+                        selected
+                        data-i18n="app_catalog_version_placeholder"
+                      >
+                        — Select a firmware version —
+                      </option>
+                    </select>
+                  </div>
+                  <div>
+                    <label
+                      for="apexAppCatalogSelect"
+                      data-i18n="app_catalog_app_label"
+                      >Application</label
+                    >
+                    <select
+                      id="apexAppCatalogSelect"
+                      class="firmware-catalog-select"
+                      disabled
+                    >
+                      <option
+                        value=""
+                        disabled
+                        selected
+                        data-i18n="app_catalog_app_placeholder"
+                      >
+                        — Select an app —
+                      </option>
+                    </select>
+                  </div>
+                </div>
+              </section>
+              <section
+                class="section firmware-catalog app-catalog"
                 id="appCatalogSection"
                 aria-labelledby="appCatalogLabel"
                 hidden
               >
-                <label id="appCatalogLabel" data-i18n="app_catalog_label"
-                  >Official overlay apps</label
+                <label
+                  id="appCatalogLabel"
+                  data-i18n="app_catalog_label"
+                  >Official F4HWN Overlay Apps</label
                 >
                 <div class="app-catalog-grid">
                   <div>
@@ -2154,7 +2211,7 @@
     <script src="js/keypad-detach.js?v=1"></script>
     <script src="js/flash.js?v=44"></script>
     <script src="js/flash-catalog.js?v=18"></script>
-    <script src="js/app-catalog.js?v=4"></script>
+    <script src="js/app-catalog.js?v=5"></script>
     <script src="js/studio.js?v=18"></script>
     <script src="js/studio-flash-counter.js?v=2"></script>
   </body>

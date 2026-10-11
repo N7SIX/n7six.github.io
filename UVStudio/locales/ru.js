@@ -320,7 +320,8 @@ window.UVSTUDIO_LOCALES.ru = {
   studio_nav_labs_only: 'только Labs',
   appsDescription:
     "Install small overlay apps (.app) into the radio's external flash and launch them from the F + 7 menu. Writing only touches the external flash, so the radio stays usable.",
-  app_catalog_label: 'Официальные оверлей-приложения',
+  app_catalog_label: 'Официальные оверлей-приложения F4HWN',
+  apex_app_catalog_label: 'Официальные оверлей-приложения N7SIX',
   app_catalog_version_label: 'Версия прошивки',
   app_catalog_version_placeholder: '— Выберите версию прошивки —',
   app_catalog_app_label: 'Приложение',

@@ -271,6 +271,22 @@ test('loads the app catalog after the installer API and exposes both selectors',
   assert.match(flashSource, /uvstudio:appselect/);
 });
 
+test('shows the N7SIX app picker above the F4HWN one', () => {
+  const apex = html.indexOf('id="apexAppCatalogSection"');
+  const main = html.indexOf('id="appCatalogSection"');
+  assert.ok(apex > 0 && main > apex);
+  assert.match(html, /id="apexAppCatalogVersionSelect"/);
+  assert.match(html, /id="apexAppCatalogSelect"/);
+  assert.match(html, /data-i18n="apex_app_catalog_label"/);
+  const appCatalogSource = fs.readFileSync(
+    path.join(root, 'js', 'app-catalog.js'),
+    'utf8',
+  );
+  assert.match(appCatalogSource, /apexAppCatalogSection/);
+  assert.match(appCatalogSource, /apexAppCatalogVersionSelect/);
+  assert.match(appCatalogSource, /APEX_APPS_PATH/);
+});
+
 test('exposes all 16 app slots in a bounded, scrollable table', () => {
   assert.match(flashSource, /const APP_SLOT_COUNT = 16/);
   assert.match(flashSource, /const APP_SLOT_LAST = APP_SLOT_COUNT - 1/);

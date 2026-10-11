@@ -1,5 +1,10 @@
 // Overlay-app catalog: discovers versioned .app archives from
-// archive/apps/v<firmware-version>/ on the main firmware repository.
+// archive/apps/v<firmware-version>/ on the main firmware repository, plus the
+// N7SIX ApeX builds from archive/apps/ApeX/v<firmware-version>/ on the ApeX
+// repository. Each source feeds its own picker, but only the main (F4HWN)
+// instance publishes update metadata — the ApeX archive only ships the apps
+// it bundles, so letting it overwrite the "latest versions" map would hide
+// updates for everything else.
 (function (root, factory) {
   const api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;
@@ -18,14 +23,20 @@
   const REPO = 'armel/uv-k1-k5v3-firmware-custom';
   const BRANCH = 'main';
   const APPS_PATH = 'archive/apps';
-  const API_ROOT = `https://api.github.com/repos/${REPO}/contents`;
+  // ApeX Edition (N7SIX): its apps live one level deeper, grouped under the
+  // "ApeX" folder so they stay separate from the mirrored F4HWN archives.
+  const APEX_REPO = 'N7SIX/UV-K1Series_ApeX-Edition_v7.6.0';
+  const APEX_APPS_PATH = `${APPS_PATH}/ApeX`;
 
-  function contentsURL(path) {
+  function contentsURL(path, repo = REPO) {
     const encodedPath = String(path)
       .split('/')
       .map(encodeURIComponent)
       .join('/');
-    return `${API_ROOT}/${encodedPath}?ref=${encodeURIComponent(BRANCH)}`;
+    return (
+      `https://api.github.com/repos/${repo}/contents/${encodedPath}` +
+      `?ref=${encodeURIComponent(BRANCH)}`
+    );
   }
 
   function compareVersionsDesc(a, b) {
@@ -120,12 +131,28 @@
     return { ...header, url: app.url, filename: app.name };
   }
 
-  function boot() {
-    const section = document.getElementById('appCatalogSection');
-    const divider = document.getElementById('appCatalogOr');
-    const versionSelect = document.getElementById('appCatalogVersionSelect');
-    const appSelect = document.getElementById('appCatalogSelect');
-    if (!section || !versionSelect || !appSelect) return;
+  // Boot one picker instance (F4HWN or N7SIX ApeX). Only the main (F4HWN)
+  // instance publishes update metadata to window.UVStudioFlash; the ApeX
+  // archive only bundles its own apps, so its listing must not overwrite the
+  // "latest app versions" map used for update indicators.
+  function bootInstance({
+    sectionId,
+    dividerId,
+    versionSelectId,
+    appSelectId,
+    appsPath,
+    repo,
+    publishUpdates,
+  }) {
+    const section = document.getElementById(sectionId);
+    const divider = document.getElementById(dividerId);
+    const versionSelect = document.getElementById(versionSelectId);
+    const appSelect = document.getElementById(appSelectId);
+    if (!section || !versionSelect || !appSelect) return null;
+
+    function instanceContentsURL(path) {
+      return contentsURL(path, repo);
+    }
 
     let versions = [];
     let loaded = false;
@@ -150,9 +177,18 @@
       select.appendChild(option);
     }
 
+    // The "or load a local file" divider is shared between the F4HWN and
+    // N7SIX pickers: keep it visible while either picker is shown, so a
+    // failed ApeX fetch cannot hide the divider under a working F4HWN list.
+    function peerVisible() {
+      return Array.from(document.querySelectorAll('section.app-catalog')).some(
+        (entry) => !entry.hidden,
+      );
+    }
+
     function hideCatalog() {
       section.hidden = true;
-      if (divider) divider.hidden = true;
+      if (divider) divider.hidden = !peerVisible();
     }
 
     function showCatalog() {
@@ -161,7 +197,7 @@
     }
 
     async function fetchApps(versionEntry) {
-      const response = await fetch(contentsURL(versionEntry.path), {
+      const response = await fetch(instanceContentsURL(versionEntry.path), {
         cache: 'no-cache',
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -193,11 +229,12 @@
       try {
         const metadata = await loadAppMetadata(versionEntry, knownApps);
         if (seq !== metadataLoadSeq) return;
-        window.dispatchEvent(
-          new CustomEvent('uvstudio:appcatalogversions', {
-            detail: { firmwareVersion: versionEntry.version, apps: metadata },
-          }),
-        );
+        if (publishUpdates)
+          window.dispatchEvent(
+            new CustomEvent('uvstudio:appcatalogversions', {
+              detail: { firmwareVersion: versionEntry.version, apps: metadata },
+            }),
+          );
       } catch (error) {
         // Update information is supplementary; keep the catalog usable.
       }
@@ -211,11 +248,13 @@
         (entry) => entry.version === requested,
       );
       if (!versionEntry) {
-        window.dispatchEvent(
-          new CustomEvent('uvstudio:appcatalogcompatibility', {
-            detail: { firmwareVersion: requested, found: false, apps: [] },
-          }),
-        );
+        if (publishUpdates) {
+          window.dispatchEvent(
+            new CustomEvent('uvstudio:appcatalogcompatibility', {
+              detail: { firmwareVersion: requested, found: false, apps: [] },
+            }),
+          );
+        }
         return;
       }
       try {
@@ -225,11 +264,16 @@
           requested !== requestedFirmwareVersion
         )
           return;
-        window.dispatchEvent(
-          new CustomEvent('uvstudio:appcatalogcompatibility', {
-            detail: { firmwareVersion: requested, found: true, apps: metadata },
-          }),
-        );
+        if (publishUpdates)
+          window.dispatchEvent(
+            new CustomEvent('uvstudio:appcatalogcompatibility', {
+              detail: {
+                firmwareVersion: requested,
+                found: true,
+                apps: metadata,
+              },
+            }),
+          );
       } catch (error) {
         // Compatibility information is supplementary; keep the radio scan usable.
       }
@@ -256,7 +300,7 @@
       if (loading || loaded) return;
       loading = true;
       try {
-        const response = await fetch(contentsURL(APPS_PATH), {
+        const response = await fetch(instanceContentsURL(appsPath), {
           cache: 'no-cache',
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -354,7 +398,35 @@
     }
   }
 
+  // Boot both pickers: the N7SIX ApeX section on top, then the F4HWN one.
+  // Best-effort ApeX listing: when unreachable, the F4HWN picker still renders
+  // exactly as before.
+  function boot() {
+    bootInstance({
+      sectionId: 'apexAppCatalogSection',
+      dividerId: 'appCatalogOr',
+      versionSelectId: 'apexAppCatalogVersionSelect',
+      appSelectId: 'apexAppCatalogSelect',
+      appsPath: APEX_APPS_PATH,
+      repo: APEX_REPO,
+      publishUpdates: false,
+    });
+    bootInstance({
+      sectionId: 'appCatalogSection',
+      dividerId: 'appCatalogOr',
+      versionSelectId: 'appCatalogVersionSelect',
+      appSelectId: 'appCatalogSelect',
+      appsPath: APPS_PATH,
+      repo: REPO,
+      publishUpdates: true,
+    });
+  }
+
   return {
+    APEX_APPS_PATH,
+    APEX_REPO,
+    APPS_PATH,
+    REPO,
     boot,
     compareVersionsDesc,
     contentsURL,

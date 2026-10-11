@@ -56,6 +56,15 @@ test('targets the stable versioned apps archive on GitHub', () => {
   );
 });
 
+test('targets the N7SIX ApeX apps archive on its own repository', () => {
+  assert.equal(catalog.APEX_REPO, 'N7SIX/UV-K1Series_ApeX-Edition_v7.6.0');
+  assert.equal(catalog.APEX_APPS_PATH, 'archive/apps/ApeX');
+  assert.equal(
+    catalog.contentsURL('archive/apps/ApeX/v7.6.11', catalog.APEX_REPO),
+    'https://api.github.com/repos/N7SIX/UV-K1Series_ApeX-Edition_v7.6.0/contents/archive/apps/ApeX/v7.6.11?ref=main',
+  );
+});
+
 test('reads the app identity and version from a FAP1 header', () => {
   const header = Buffer.alloc(64);
   header.writeUInt32LE(0x31504146, 0);

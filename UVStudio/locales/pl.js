@@ -316,7 +316,8 @@ window.UVSTUDIO_LOCALES.pl = {
   studio_nav_labs_only: 'tylko Labs',
   appsDescription:
     "Install small overlay apps (.app) into the radio's external flash and launch them from the F + 7 menu. Writing only touches the external flash, so the radio stays usable.",
-  app_catalog_label: 'Oficjalne aplikacje nakładkowe',
+  app_catalog_label: 'Oficjalne aplikacje nakładkowe F4HWN',
+  apex_app_catalog_label: 'Oficjalne aplikacje nakładkowe N7SIX',
   app_catalog_version_label: 'Wersja firmware',
   app_catalog_version_placeholder: '— Wybierz wersję firmware —',
   app_catalog_app_label: 'Aplikacja',
