@@ -1,7 +1,0 @@
----
-layout: post
----
-
-hello
-
-&nbsp;
