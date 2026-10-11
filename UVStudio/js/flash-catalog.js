@@ -277,10 +277,12 @@
     const select = document.getElementById('firmwareCatalogSelect');
     const section = document.getElementById('firmwareCatalogSection');
     const divider = document.getElementById('firmwareCatalogOr');
+    const apexSelect = document.getElementById('apexFirmwareCatalogSelect');
+    const apexSection = document.getElementById('apexFirmwareCatalogSection');
     const slotSelect = document.getElementById('slotFirmwareCatalogSelect');
     const slotSection = document.getElementById('slotFirmwareCatalogSection');
     const slotDivider = document.getElementById('slotFirmwareCatalogOr');
-    const selects = [select, slotSelect].filter(Boolean);
+    const selects = [apexSelect, select, slotSelect].filter(Boolean);
     if (!selects.length) return; // Catalog markup absent.
 
     // Purge the obsolete persistent listing cache written by earlier versions.
@@ -303,6 +305,7 @@
     }
 
     function showCatalog(flashVisible, slotVisible = flashVisible) {
+      if (apexSection) apexSection.hidden = !flashVisible;
       if (section) section.hidden = !flashVisible;
       if (divider) divider.hidden = !flashVisible;
       if (slotSection) slotSection.hidden = !slotVisible;
@@ -377,10 +380,21 @@
       return optionCount;
     }
 
+    // The N7SIX picker lists only ApeX Edition builds; the F4HWN picker keeps
+    // everything else so each firmware is offered exactly once.
+    function isApexOffered(entry) {
+      return isOffered(entry) && entry.brand === 'apex';
+    }
+
+    function isFlashOffered(entry) {
+      return isOffered(entry) && entry.brand !== 'apex';
+    }
+
     function render() {
-      if (!groups) return { flash: 0, slots: 0 };
+      if (!groups) return { apex: 0, flash: 0, slots: 0 };
       return {
-        flash: select ? renderSelect(select) : 0,
+        apex: apexSelect ? renderSelect(apexSelect, isApexOffered) : 0,
+        flash: select ? renderSelect(select, isFlashOffered) : 0,
         slots: slotSelect ? renderSelect(slotSelect, isSlotOffered) : 0,
       };
     }
@@ -414,8 +428,14 @@
         );
         groups = categorize(files);
         const counts = render();
-        showCatalog(counts.flash > 0, counts.slots > 0);
-        loaded = counts.flash > 0 || counts.slots > 0;
+        // The N7SIX and F4HWN pickers show independently: whichever repository
+        // answered still offers its builds when the other one is unreachable.
+        if (apexSection) apexSection.hidden = counts.apex === 0;
+        if (section) section.hidden = counts.flash === 0;
+        if (divider) divider.hidden = counts.apex === 0 && counts.flash === 0;
+        if (slotSection) slotSection.hidden = counts.slots === 0;
+        if (slotDivider) slotDivider.hidden = counts.slots === 0;
+        loaded = counts.apex > 0 || counts.flash > 0 || counts.slots > 0;
         const slotEntries = [];
         groups.forEach((entries) => {
           const latest = entries.find(
@@ -440,14 +460,29 @@
       }
     }
 
+    function loadCatalogUrl(targetSelect, url, loaderName) {
+      if (!url) return;
+      const flash = window.UVStudioFlash;
+      if (flash && typeof flash[loaderName] === 'function') {
+        flash[loaderName](url);
+      }
+    }
+
+    if (apexSelect) {
+      apexSelect.addEventListener('change', () => {
+        loadCatalogUrl(apexSelect, apexSelect.value, 'loadFirmwareFromURL');
+        // Only one flash source stays selected: picking here clears the F4HWN
+        // picker back to its placeholder.
+        if (select && select.options.length) select.selectedIndex = 0;
+      });
+    }
+
     if (select) {
       select.addEventListener('change', () => {
-        const url = select.value;
-        if (!url) return;
-        const flash = window.UVStudioFlash;
-        if (flash && typeof flash.loadFirmwareFromURL === 'function') {
-          flash.loadFirmwareFromURL(url);
-        }
+        loadCatalogUrl(select, select.value, 'loadFirmwareFromURL');
+        // Mirror rule: picking here clears the N7SIX picker.
+        if (apexSelect && apexSelect.options.length)
+          apexSelect.selectedIndex = 0;
       });
     }
 
@@ -467,16 +502,20 @@
       if (groups) render();
     });
 
-    // Mutual exclusivity: when a local file is picked, drop the catalog selection
-    // back to its placeholder so only one firmware source ever looks selected.
+    // Mutual exclusivity: when a local file is picked, drop both catalog
+    // selections back to their placeholders so only one firmware source ever
+    // looks selected.
     window.addEventListener('uvstudio:firmwareselect', (event) => {
       if (
-        select &&
         event.detail &&
         event.detail.source === 'local' &&
-        select.options.length
+        (apexSelect || select)
       ) {
-        select.selectedIndex = 0;
+        [apexSelect, select].forEach((catalogSelect) => {
+          if (catalogSelect && catalogSelect.options.length) {
+            catalogSelect.selectedIndex = 0;
+          }
+        });
       }
     });
 

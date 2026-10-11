@@ -243,6 +243,24 @@ test('loads the shared RF Log protocol before both consumers', () => {
   assert.ok(rf > 0 && rf < viewer && viewer < tools);
 });
 
+test('offers separate Official N7SIX and F4HWN firmware pickers', () => {
+  const apex = html.indexOf('id="apexFirmwareCatalogSection"');
+  const firmware = html.indexOf('id="firmwareCatalogSection"');
+  assert.ok(apex > 0 && firmware > 0 && apex < firmware);
+  assert.match(
+    html,
+    /id="apexFirmwareCatalogLabel"[^>]*data-i18n="apex_catalog_label"/,
+  );
+  assert.match(html, /id="apexFirmwareCatalogSelect"/);
+  const catalogSource = fs.readFileSync(
+    path.join(root, 'js', 'flash-catalog.js'),
+    'utf8',
+  );
+  assert.match(catalogSource, /apexFirmwareCatalogSelect/);
+  assert.match(catalogSource, /apexFirmwareCatalogSection/);
+  assert.match(catalogSource, /isApexOffered/);
+});
+
 test('loads the app catalog after the installer API and exposes both selectors', () => {
   const flash = html.indexOf('js/flash.js');
   const catalog = html.indexOf('js/app-catalog.js');
@@ -841,6 +859,31 @@ test('keeps all local script and stylesheet resources resolvable', () => {
     .filter((resource) => !resource.startsWith('data:'));
   resources.forEach((resource) => {
     assert.equal(fs.existsSync(path.join(root, resource)), true, resource);
+  });
+});
+
+test('translates the Official N7SIX picker label in every locale', () => {
+  const localeDir = path.join(root, 'locales');
+  const files = fs
+    .readdirSync(localeDir)
+    .filter((file) => /^[a-z]{2}\.js$/.test(file));
+  assert.match(html, /data-i18n="apex_catalog_label"/);
+  files.forEach((file) => {
+    const context = { window: {} };
+    vm.runInNewContext(
+      fs.readFileSync(path.join(localeDir, file), 'utf8'),
+      context,
+    );
+    const dictionary = context.window.UVSTUDIO_LOCALES[file.slice(0, 2)];
+    assert.ok(dictionary.apex_catalog_label, `${file}:apex_catalog_label`);
+    assert.match(dictionary.apex_catalog_label, /N7SIX/, file);
+    if (file !== 'en.js') {
+      assert.notEqual(
+        dictionary.apex_catalog_label,
+        'Official N7SIX firmware',
+        file,
+      );
+    }
   });
 });
 

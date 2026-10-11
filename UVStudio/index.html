@@ -864,6 +864,32 @@
             <div class="tool-view active" id="flash-content" role="region">
               <section
                 class="section firmware-catalog"
+                id="apexFirmwareCatalogSection"
+                aria-labelledby="apexFirmwareCatalogLabel"
+                hidden
+              >
+                <label
+                  id="apexFirmwareCatalogLabel"
+                  for="apexFirmwareCatalogSelect"
+                  data-i18n="apex_catalog_label"
+                  >Official N7SIX firmware</label
+                >
+                <select
+                  id="apexFirmwareCatalogSelect"
+                  class="firmware-catalog-select"
+                >
+                  <option
+                    value=""
+                    disabled
+                    selected
+                    data-i18n="flash_catalog_placeholder"
+                  >
+                    — Select a version —
+                  </option>
+                </select>
+              </section>
+              <section
+                class="section firmware-catalog"
                 id="firmwareCatalogSection"
                 aria-labelledby="firmwareCatalogLabel"
                 hidden
