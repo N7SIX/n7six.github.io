@@ -31,12 +31,6 @@ bundle exec jekyll serve
 
 ## Testing
 
-Run basic JS tests:
-
-```sh
-npx mocha test/*.test.js
-```
-
 Run the UV Studio and UVTools2 tests:
 
 ```sh
@@ -66,7 +60,6 @@ former `/uvstudio/` address redirects to UV Studio at `/UVStudio/`.
 - `_posts/` — Blog posts
 - `_layouts/` — Jekyll layouts
 - `css/`, `js/`, `images/` — Static assets
-- `test/` — JS tests
 - `UVStudio/` — Unified radio viewer and firmware tools
 - `uvtools2/` — Standalone firmware flasher and maintenance tools
 

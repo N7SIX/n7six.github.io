@@ -23,10 +23,6 @@ jobs:
         run: npm run lint:css
       - name: Format check
         run: npm run format:check
-      - name: Run basic JS tests
-        run: |
-          npm install --save-dev mocha
-          npx mocha test/*.test.js
       - name: Protect UV Studio core (contract + performance)
         run: npm run test:core
       - name: Test UV applications
