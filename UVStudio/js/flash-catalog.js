@@ -1,8 +1,10 @@
 // Firmware catalog: lists stable archive/ files from the main branch and the
 // optional rolling development build from feature_update_v6 through the GitHub
-// Contents API. Selected builds feed into either the main flash pipeline or the
-// multiboot-slot pipeline through window.UVStudioFlash. Pure helpers are exported
-// for Node tests; the browser runtime is guarded and self-boots.
+// Contents API. ApeX Edition builds are listed from the N7SIX ApeX repository
+// archive and merged into the same menu. Selected builds feed into either the
+// main flash pipeline or the multiboot-slot pipeline through
+// window.UVStudioFlash. Pure helpers are exported for Node tests; the browser
+// runtime is guarded and self-boots.
 (function (root, factory) {
   const api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;
@@ -29,6 +31,13 @@
   const DEVELOPMENT_API_URL =
     `https://api.github.com/repos/${REPO}/contents/${ARCHIVE_PATH}/${DEVELOPMENT_FILENAME}` +
     `?ref=${encodeURIComponent(DEVELOPMENT_BRANCH)}`;
+  // ApeX Edition (N7SIX), listed from its own repository archive on main. The
+  // fork still mirrors the F4HWN and Quansheng archives; only the ApeX builds
+  // are merged so every firmware is offered exactly once.
+  const APEX_REPO = 'N7SIX/UV-K1Series_ApeX-Edition_v7.6.0';
+  const APEX_API_URL =
+    `https://api.github.com/repos/${APEX_REPO}/contents/${ARCHIVE_PATH}` +
+    `?ref=${encodeURIComponent(STABLE_BRANCH)}`;
   // Only current firmwares are offered: v5.0 and newer, no beta or SA818 builds.
   const MIN_MAJOR_VERSION = 5;
   // Multiboot first ships with v6; older images cannot return to the slot menu.
@@ -41,6 +50,7 @@
     'transfer',
     'labs',
     'development',
+    'apex',
     'fusion_k1',
     'fusion_k5v3',
     'stock',
@@ -51,6 +61,7 @@
     transfer: 'F4HWN Transfer',
     labs: 'F4HWN Labs',
     development: 'F4HWN Fusion (dev, unstable)',
+    apex: 'ApeX Edition',
     fusion_k1: 'F4HWN Fusion · K1',
     fusion_k5v3: 'F4HWN Fusion · K5v3',
     stock: 'Quansheng (stock)',
@@ -78,6 +89,16 @@
     if (isDevelopment) {
       brand = 'f4hwn';
       group = 'development';
+    } else if (lower.startsWith('n7six')) {
+      // ApeX Edition builds, e.g. n7six.ApeX-k1.v7.6.11.bin.
+      const apexMatch = lower.match(
+        /^n7six[._-]apex(?:[._-](k1|k5v3))?(?:[._-].*)?\.bin$/,
+      );
+      if (!apexMatch) return null;
+      brand = 'apex';
+      group = 'apex';
+      model =
+        apexMatch[1] === 'k1' ? 'K1' : apexMatch[1] === 'k5v3' ? 'K5v3' : '';
     } else if (lower.startsWith('quansheng')) {
       brand = 'stock';
       group = 'stock';
@@ -144,13 +165,14 @@
     );
   }
 
-  // Multiboot slots offer stable v6+ F4HWN editions. Older images, the rolling
-  // development build and Quansheng stock images do not embed multiboot.
+  // Multiboot slots offer stable v6+ F4HWN and ApeX editions (ApeX extends
+  // Fusion). Older images, the rolling development build and Quansheng stock
+  // images do not embed multiboot.
   function isSlotOffered(entry) {
     return (
       Boolean(entry) &&
       isOffered(entry) &&
-      entry.brand === 'f4hwn' &&
+      (entry.brand === 'f4hwn' || entry.brand === 'apex') &&
       !entry.isDevelopment &&
       majorVersion(entry.version) >= MIN_SLOT_MAJOR_VERSION
     );
@@ -188,6 +210,18 @@
     return files;
   }
 
+  // Keep only the ApeX-branded builds from the ApeX repository listing: the
+  // fork still mirrors the F4HWN and Quansheng archives, which would otherwise
+  // duplicate the main listing.
+  function mergeApexFiles(apexFiles) {
+    return (Array.isArray(apexFiles) ? apexFiles : [])
+      .filter((file) => {
+        const parsed = parseFirmwareName(file && file.name);
+        return Boolean(parsed) && parsed.brand === 'apex';
+      })
+      .map(normalizeFile);
+  }
+
   // Group GitHub file entries ({ name, size, download_url }) into an ordered map
   // of firmware families, newest version first within each family.
   function categorize(files) {
@@ -214,7 +248,8 @@
   // Compact option label, e.g. "v5.7.0 · 58 KB" or "K1 v7.03.01 · 61 KB".
   function formatOptionLabel(entry) {
     const parts = [];
-    if (entry.group === 'stock' && entry.model) parts.push(entry.model);
+    if ((entry.group === 'stock' || entry.group === 'apex') && entry.model)
+      parts.push(entry.model);
     // Kept in English like the other technical tags (stable / dev / stock).
     if (entry.isDevelopment) parts.push('⚠ Development · unstable');
     else parts.push(entry.version ? `v${entry.version}` : entry.name);
@@ -233,6 +268,7 @@
     isOffered,
     isSlotOffered,
     mergeCatalogFiles,
+    mergeApexFiles,
   };
 
   // ========== BROWSER RUNTIME ==========
@@ -287,6 +323,18 @@
         };
       } catch (error) {
         return null;
+      }
+    }
+
+    // Best-effort ApeX listing: when unreachable, the catalog still renders the
+    // F4HWN builds exactly as before.
+    async function fetchApexFiles() {
+      try {
+        const response = await fetch(APEX_API_URL, { cache: 'no-cache' });
+        if (!response.ok) return [];
+        return mergeApexFiles(await response.json());
+      } catch (error) {
+        return [];
       }
     }
 
@@ -357,8 +405,13 @@
           throw new Error(`HTTP ${response.status}`);
         }
         const stableFiles = await response.json();
-        const developmentFile = await fetchDevelopmentFile();
-        const files = mergeCatalogFiles(stableFiles, developmentFile);
+        const [developmentFile, apexFiles] = await Promise.all([
+          fetchDevelopmentFile(),
+          fetchApexFiles(),
+        ]);
+        const files = mergeCatalogFiles(stableFiles, developmentFile).concat(
+          apexFiles,
+        );
         groups = categorize(files);
         const counts = render();
         showCatalog(counts.flash > 0, counts.slots > 0);

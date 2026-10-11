@@ -14,6 +14,7 @@ const {
   isOffered,
   isSlotOffered,
   mergeCatalogFiles,
+  mergeApexFiles,
 } = catalog;
 
 // Real filenames from armel/uv-k1-k5v3-firmware-custom/archive.
@@ -84,6 +85,11 @@ const SAMPLE = [
     download_url: 'https://x/quansheng.k5v3.stock.firmware.v7.00.11.bin',
   },
   {
+    name: 'n7six.ApeX-k1.v7.6.11.bin',
+    size: 110196,
+    download_url: 'https://x/n7six.ApeX-k1.v7.6.11.bin',
+  },
+  {
     name: 'f4hwn.logo.v1.png',
     size: 1024,
     download_url: 'https://x/f4hwn.logo.v1.png',
@@ -149,6 +155,20 @@ test('takes the rolling build only from the development branch response', () => 
   assert.equal(development[0].download_url, currentDevelopment.download_url);
 });
 
+test('keeps only ApeX builds from the ApeX repository listing', () => {
+  // The ApeX fork mirrors the F4HWN and Quansheng archives: those duplicates
+  // must be dropped, only the ApeX-branded builds survive the merge.
+  const merged = mergeApexFiles(SAMPLE);
+  assert.deepEqual(
+    merged.map((file) => file.name),
+    ['n7six.ApeX-k1.v7.6.11.bin'],
+  );
+  assert.equal(merged[0].size, 110196);
+  assert.equal(merged[0].download_url, 'https://x/n7six.ApeX-k1.v7.6.11.bin');
+  assert.deepEqual(mergeApexFiles(null), []);
+  assert.deepEqual(mergeApexFiles('not-an-array'), []);
+});
+
 test('loads the rolling development build from feature_update_v6', () => {
   const source = fs.readFileSync(
     require.resolve('../js/flash-catalog.js'),
@@ -186,6 +206,23 @@ test('routes each stable F4HWN edition to its own catalog section', () => {
   );
   assert.equal(parseFirmwareName('f4hwn.labs.v6.0.0.bin').group, 'labs');
   assert.equal(parseFirmwareName('f4hwn.max.v6.0.0.bin').group, 'max');
+});
+
+test('routes ApeX Edition builds to their own catalog section', () => {
+  assert.deepEqual(parseFirmwareName('n7six.ApeX-k1.v7.6.11.bin'), {
+    name: 'n7six.ApeX-k1.v7.6.11.bin',
+    brand: 'apex',
+    group: 'apex',
+    model: 'K1',
+    version: '7.6.11',
+    isBeta: false,
+    isSa818: false,
+    isDevelopment: false,
+  });
+  assert.equal(parseFirmwareName('n7six.ApeX-k5v3.v7.6.11.bin').model, 'K5v3');
+  // Unknown n7six files are not flashable ApeX builds.
+  assert.equal(parseFirmwareName('n7six.notes.v1.0.0.txt'), null);
+  assert.equal(parseFirmwareName('n7six.fusion.v6.0.0.bin'), null);
 });
 
 test('sorts versions numerically, not alphabetically', () => {
@@ -233,6 +270,10 @@ test('offers every stable F4HWN edition in the multiboot slot picker', () => {
   );
   assert.equal(isSlotOffered(parseFirmwareName('f4hwn.labs.v6.0.0.bin')), true);
   assert.equal(
+    isSlotOffered(parseFirmwareName('n7six.ApeX-k1.v7.6.11.bin')),
+    true,
+  );
+  assert.equal(
     isSlotOffered(parseFirmwareName('f4hwn.fusion.v5.9.0.bin')),
     false,
   );
@@ -270,6 +311,10 @@ test('shares one versioned CHIRP driver across every offered stable F4HWN editio
     false,
   );
   assert.equal(
+    hasSharedChirpDriver(parseFirmwareName('n7six.ApeX-k1.v7.6.11.bin')),
+    false, // ApeX bundles its own driver, not the F4HWN release tags
+  );
+  assert.equal(
     hasSharedChirpDriver(
       parseFirmwareName('quansheng.k1.stock.firmware.v7.03.01.bin'),
     ),
@@ -287,6 +332,7 @@ test('groups offered entries newest-first and drops everything else', () => {
       'transfer',
       'labs',
       'development',
+      'apex',
       'fusion_k1',
       'fusion_k5v3',
       'stock',
@@ -322,6 +368,11 @@ test('groups offered entries newest-first and drops everything else', () => {
   assert.equal(groups.get('fusion_k1').length, 0);
   assert.equal(groups.get('fusion_k5v3').length, 0);
   assert.equal(groups.get('stock').length, 2);
+  assert.deepEqual(
+    groups.get('apex').map((e) => e.name),
+    ['n7six.ApeX-k1.v7.6.11.bin'],
+  );
+  assert.equal(groups.get('apex')[0].version, '7.6.11');
 });
 
 test('formats compact, human option labels', () => {
@@ -342,4 +393,12 @@ test('formats compact, human option labels', () => {
     size: 62000,
   };
   assert.match(formatOptionLabel(stock), /^K1 v7\.03\.01 · \d+ KB$/);
+
+  const apex = {
+    group: 'apex',
+    model: 'K1',
+    version: '7.6.11',
+    size: 110196,
+  };
+  assert.match(formatOptionLabel(apex), /^K1 v7\.6\.11 · \d+ KB$/);
 });

@@ -127,6 +127,7 @@ test('flash-catalog keeps its required exports', () => {
     'isOffered',
     'isSlotOffered',
     'mergeCatalogFiles',
+    'mergeApexFiles',
   ]) {
     assert.equal(
       typeof api[fn],
