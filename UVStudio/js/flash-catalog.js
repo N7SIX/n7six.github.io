@@ -38,8 +38,7 @@
   const APEX_API_URL =
     `https://api.github.com/repos/${APEX_REPO}/contents/${ARCHIVE_PATH}` +
     `?ref=${encodeURIComponent(STABLE_BRANCH)}`;
-  const APEX_RELEASES_API_URL =
-    `https://api.github.com/repos/${APEX_REPO}/releases/latest`;
+  const APEX_RELEASES_API_URL = `https://api.github.com/repos/${APEX_REPO}/releases/latest`;
   // Only current firmwares are offered: v5.0 and newer, no beta or SA818 builds.
   const MIN_MAJOR_VERSION = 5;
   // Multiboot first ships with v6; older images cannot return to the slot menu.
