@@ -38,6 +38,8 @@
   const APEX_API_URL =
     `https://api.github.com/repos/${APEX_REPO}/contents/${ARCHIVE_PATH}` +
     `?ref=${encodeURIComponent(STABLE_BRANCH)}`;
+  const APEX_RELEASES_API_URL =
+    `https://api.github.com/repos/${APEX_REPO}/releases/latest`;
   // Only current firmwares are offered: v5.0 and newer, no beta or SA818 builds.
   const MIN_MAJOR_VERSION = 5;
   // Multiboot first ships with v6; older images cannot return to the slot menu.
@@ -90,7 +92,7 @@
       brand = 'f4hwn';
       group = 'development';
     } else if (lower.startsWith('n7six')) {
-      // ApeX Edition builds, e.g. n7six.ApeX-k1.v7.6.11.bin.
+      // ApeX Edition builds, e.g. n7six.ApeX-k1.v7.6.12.bin.
       const apexMatch = lower.match(
         /^n7six[._-]apex(?:[._-](k1|k5v3))?(?:[._-].*)?\.bin$/,
       );
@@ -194,7 +196,8 @@
     return {
       name: file && file.name,
       size: file && file.size,
-      download_url: file && file.download_url,
+      download_url:
+        (file && (file.download_url || file.browser_download_url)) || null,
     };
   }
 
@@ -334,8 +337,32 @@
     async function fetchApexFiles() {
       try {
         const response = await fetch(APEX_API_URL, { cache: 'no-cache' });
-        if (!response.ok) return [];
-        return mergeApexFiles(await response.json());
+        const archiveFiles = response.ok
+          ? mergeApexFiles(await response.json())
+          : [];
+        // Also include the binary firmware published as a release asset, so the
+        // latest ApeX build is offered even before it lands in the archive.
+        let releaseFiles = [];
+        try {
+          const releaseResponse = await fetch(APEX_RELEASES_API_URL, {
+            cache: 'no-cache',
+          });
+          if (releaseResponse.ok) {
+            const release = await releaseResponse.json();
+            releaseFiles = mergeApexFiles(release.assets || []);
+          }
+        } catch (e) {
+          releaseFiles = [];
+        }
+        // Deduplicate by name, preferring the archive copy when both exist.
+        const seen = new Set();
+        const merged = [];
+        for (const file of archiveFiles.concat(releaseFiles)) {
+          if (seen.has(file.name)) continue;
+          seen.add(file.name);
+          merged.push(file);
+        }
+        return merged;
       } catch (error) {
         return [];
       }
