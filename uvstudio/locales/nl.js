@@ -1,7 +1,7 @@
 window.UVSTUDIO_LOCALES = window.UVSTUDIO_LOCALES || {};
 window.UVSTUDIO_LOCALES.nl = {
   flash_catalog_label: 'Officiële F4HWN-firmware',
-  apex_catalog_label: 'Officiële N7SIX-firmware',
+  official_n7six_firmware: 'Officiële N7SIX-firmware',
   flash_catalog_placeholder: '— Kies een versie —',
   flash_catalog_or: 'of een lokaal bestand laden',
   slot_catalog_label: 'Multiboot-compatibele F4HWN-firmware',

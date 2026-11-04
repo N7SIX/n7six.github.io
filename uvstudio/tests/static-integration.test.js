@@ -145,7 +145,7 @@ test('offers separate Official N7SIX and F4HWN firmware pickers', () => {
   assert.ok(apex > 0 && f4hwn > apex);
   assert.match(
     html,
-    /id="apexFirmwareCatalogLabel"[^>]*data-i18n="apex_catalog_label"/,
+    /id="apexFirmwareCatalogLabel"[^>]*data-i18n="official_n7six_firmware"/,
   );
   assert.match(html, /id="apexFirmwareCatalogSelect"/);
   assert.match(
@@ -168,7 +168,7 @@ test('translates the Official N7SIX firmware picker in every locale', () => {
       context,
     );
     const dictionary = context.window.UVSTUDIO_LOCALES[file.slice(0, 2)];
-    assert.match(dictionary.apex_catalog_label, /N7SIX/, file);
+    assert.match(dictionary.official_n7six_firmware, /N7SIX/, file);
   });
 });
 
