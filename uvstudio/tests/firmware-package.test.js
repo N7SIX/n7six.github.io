@@ -13,7 +13,7 @@ function u32(value) {
 }
 
 // Same layout as cmake/pack_fw_assets.py in the firmware repository.
-function buildPackage(image, payload, buildId = Buffer.alloc(16, 0xA5)) {
+function buildPackage(image, payload, buildId = Buffer.alloc(16, 0xa5)) {
   const header = Buffer.alloc(32);
   header.writeUInt32LE(pkg.PACK_MAGIC, 0);
   header.writeUInt16LE(1, 4);
@@ -23,7 +23,12 @@ function buildPackage(image, payload, buildId = Buffer.alloc(16, 0xA5)) {
   buildId.copy(header, 16);
   const pack = Buffer.concat([header, payload]);
   const body = Buffer.concat([image, pack]);
-  const trailer = Buffer.concat([u32(pkg.TRAILER_MAGIC), u32(image.length), u32(pack.length), u32(zlib.crc32(body))]);
+  const trailer = Buffer.concat([
+    u32(pkg.TRAILER_MAGIC),
+    u32(image.length),
+    u32(pack.length),
+    u32(zlib.crc32(body)),
+  ]);
   return new Uint8Array(Buffer.concat([body, trailer]));
 }
 
@@ -52,11 +57,16 @@ test('splits a firmware package into image and asset pack', () => {
 
 test('rejects a damaged package instead of flashing it as a binary', () => {
   const bytes = buildPackage(Buffer.alloc(4096, 1), Buffer.alloc(512, 2));
-  bytes[100] ^= 0xFF;
-  assert.throws(() => pkg.splitFirmwarePackage(bytes), { code: 'UVSTUDIO_FIRMWARE_PACKAGE_INVALID' });
+  bytes[100] ^= 0xff;
+  assert.throws(() => pkg.splitFirmwarePackage(bytes), {
+    code: 'UVSTUDIO_FIRMWARE_PACKAGE_INVALID',
+  });
 });
 
 test('rejects an asset pack larger than its 16 KiB zone', () => {
-  const bytes = buildPackage(Buffer.alloc(4096, 1), Buffer.alloc(pkg.ZONE_SIZE, 2));
+  const bytes = buildPackage(
+    Buffer.alloc(4096, 1),
+    Buffer.alloc(pkg.ZONE_SIZE, 2),
+  );
   assert.throws(() => pkg.splitFirmwarePackage(bytes), /zone/);
 });

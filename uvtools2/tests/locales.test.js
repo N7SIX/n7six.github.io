@@ -7,14 +7,28 @@ const test = require('node:test');
 const vm = require('node:vm');
 
 const localeDirectory = path.join(__dirname, '..', 'locales');
-const expectedLanguages = ['de', 'en', 'es', 'fr', 'it', 'nl', 'pl', 'pt', 'ru', 'zh'];
+const expectedLanguages = [
+  'de',
+  'en',
+  'es',
+  'fr',
+  'it',
+  'nl',
+  'pl',
+  'pt',
+  'ru',
+  'zh',
+];
 
 function loadLocales() {
   const context = { window: {} };
   vm.createContext(context);
 
   for (const language of expectedLanguages) {
-    const source = fs.readFileSync(path.join(localeDirectory, `${language}.js`), 'utf8');
+    const source = fs.readFileSync(
+      path.join(localeDirectory, `${language}.js`),
+      'utf8',
+    );
     vm.runInContext(source, context, { filename: `${language}.js` });
   }
 
@@ -39,7 +53,7 @@ test('all supported locale dictionaries are present and complete', () => {
     assert.deepEqual(
       Object.keys(locales[language]).sort(),
       englishKeys,
-      `${language} must contain exactly the English locale keys`
+      `${language} must contain exactly the English locale keys`,
     );
   }
 });
@@ -51,12 +65,12 @@ test('translated strings preserve placeholders and HTML markup', () => {
       assert.deepEqual(
         placeholders(translatedValue),
         placeholders(englishValue),
-        `${language}.${key} must preserve placeholders`
+        `${language}.${key} must preserve placeholders`,
       );
       assert.deepEqual(
         htmlTags(translatedValue),
         htmlTags(englishValue),
-        `${language}.${key} must preserve HTML tags`
+        `${language}.${key} must preserve HTML tags`,
       );
     }
   }

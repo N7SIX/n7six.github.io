@@ -17,7 +17,7 @@
   const ROW_COUNT = 64;
   const VISIBLE_TRAFFIC_COUNT = 512;
   const STATUS_PACKET_SIZE = 4;
-  const PACKET_SIZE = STATUS_PACKET_SIZE + (ROW_SIZE * (ROW_COUNT + 1));
+  const PACKET_SIZE = STATUS_PACKET_SIZE + ROW_SIZE * (ROW_COUNT + 1);
   const HISTORY_PACKET_SIZE = ROW_SIZE * ROW_COUNT;
   const STATUS_ACTIVE = 1 << 0;
   const STATUS_HAS_TRAFFIC = 1 << 1;
@@ -25,10 +25,19 @@
   const STATUS_DISABLED = 1 << 3;
   const FLAG_TX = 1 << 0;
   const FLAG_SESSION = 1 << 3;
-  const CHANNEL_NONE = 0xFFFF;
-  const BATT_UNKNOWN = 0xFF;
+  const CHANNEL_NONE = 0xffff;
+  const BATT_UNKNOWN = 0xff;
   const BATT_OFFSET = 600;
-  const POWER_LABELS = ['USER', 'LOW1', 'LOW2', 'LOW3', 'LOW4', 'LOW5', 'MID', 'HIGH'];
+  const POWER_LABELS = [
+    'USER',
+    'LOW1',
+    'LOW2',
+    'LOW3',
+    'LOW4',
+    'LOW5',
+    'MID',
+    'HIGH',
+  ];
   const MAX_VIEWER_FRAME_SIZE = 8192;
 
   function protocolError(code, message) {
@@ -43,14 +52,14 @@
     while (buffer.length >= 2) {
       let header = -1;
       for (let i = 0; i < buffer.length - 1; i++) {
-        if (buffer[i] === 0xAA && buffer[i + 1] === 0x55) {
+        if (buffer[i] === 0xaa && buffer[i + 1] === 0x55) {
           header = i;
           break;
         }
       }
 
       if (header < 0) {
-        const keepTrailingHeaderByte = buffer[buffer.length - 1] === 0xAA;
+        const keepTrailingHeaderByte = buffer[buffer.length - 1] === 0xaa;
         buffer.splice(0, buffer.length - (keepTrailingHeaderByte ? 1 : 0));
         return null;
       }
@@ -67,7 +76,7 @@
 
       const totalSize = 5 + size + 1;
       if (buffer.length < totalSize) return null;
-      if (buffer[totalSize - 1] !== 0x0A) {
+      if (buffer[totalSize - 1] !== 0x0a) {
         buffer.shift();
         continue;
       }
@@ -104,7 +113,7 @@
       flags: view.getUint8(offset + 12),
       meter: view.getUint8(offset + 13),
       battVolt: view.getUint8(offset + 14),
-      channelName: parseChannelName(view, offset)
+      channelName: parseChannelName(view, offset),
     };
   }
 
@@ -113,14 +122,27 @@
   }
 
   function parseMainPacket(payload) {
-    if (payload.length !== PACKET_SIZE && payload.length !== STATUS_PACKET_SIZE) {
-      throw protocolError('RF_LOG_PACKET_SIZE', 'Unexpected RF Log packet size');
+    if (
+      payload.length !== PACKET_SIZE &&
+      payload.length !== STATUS_PACKET_SIZE
+    ) {
+      throw protocolError(
+        'RF_LOG_PACKET_SIZE',
+        'Unexpected RF Log packet size',
+      );
     }
 
-    const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+    const view = new DataView(
+      payload.buffer,
+      payload.byteOffset,
+      payload.byteLength,
+    );
     const version = view.getUint8(0);
     if (version !== PACKET_VERSION) {
-      throw protocolError('RF_LOG_VERSION', `Unsupported RF Log packet version ${version}`);
+      throw protocolError(
+        'RF_LOG_VERSION',
+        `Unsupported RF Log packet version ${version}`,
+      );
     }
 
     const statusFlags = view.getUint8(1);
@@ -133,7 +155,7 @@
       hasTraffic: (statusFlags & STATUS_HAS_TRAFFIC) !== 0,
       full: payload.length === PACKET_SIZE,
       liveRow: null,
-      rows: []
+      rows: [],
     };
     if (!result.full) return result;
 
@@ -150,10 +172,17 @@
 
   function parseHistoryPacket(payload) {
     if (payload.length !== HISTORY_PACKET_SIZE) {
-      throw protocolError('RF_LOG_HISTORY_SIZE', 'Unexpected RF Log history packet size');
+      throw protocolError(
+        'RF_LOG_HISTORY_SIZE',
+        'Unexpected RF Log history packet size',
+      );
     }
 
-    const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+    const view = new DataView(
+      payload.buffer,
+      payload.byteOffset,
+      payload.byteLength,
+    );
     const rows = [];
     for (let i = 0, offset = 0; i < ROW_COUNT; i++, offset += ROW_SIZE) {
       const row = parseRow(view, offset);
@@ -163,7 +192,7 @@
   }
 
   function mergeRows(target, rows) {
-    rows.forEach(row => target.set(row.sequence, row));
+    rows.forEach((row) => target.set(row.sequence, row));
   }
 
   // Match K5Viewer's visible-window semantics: 512 traffic entries plus the
@@ -171,17 +200,17 @@
   function limitVisibleRows(rows) {
     const sorted = Array.from(rows).sort((a, b) => b.sequence - a.sequence);
     const traffic = sorted
-      .filter(row => (row.flags & FLAG_SESSION) === 0)
+      .filter((row) => (row.flags & FLAG_SESSION) === 0)
       .slice(0, VISIBLE_TRAFFIC_COUNT);
     if (traffic.length === 0) {
-      return sorted.filter(row => (row.flags & FLAG_SESSION) !== 0);
+      return sorted.filter((row) => (row.flags & FLAG_SESSION) !== 0);
     }
 
     const oldestTrafficSequence = traffic[traffic.length - 1].sequence;
-    return sorted.filter(row =>
+    return sorted.filter((row) =>
       (row.flags & FLAG_SESSION) === 0
         ? row.sequence >= oldestTrafficSequence
-        : row.sequence > oldestTrafficSequence
+        : row.sequence > oldestTrafficSequence,
     );
   }
 
@@ -193,7 +222,7 @@
     const sessions = [];
     let current = null;
 
-    sorted.forEach(row => {
+    sorted.forEach((row) => {
       if ((row.flags & FLAG_SESSION) !== 0) {
         if (current) sessions.push(current);
         current = { marker: row, rows: [], partial: false };
@@ -207,12 +236,15 @@
     // Empty historical sessions add no analytics value, but keep an empty
     // current session so a fresh power-on remains visible.
     return sessions
-      .filter((session, index) => session.rows.length > 0 || index === sessions.length - 1)
+      .filter(
+        (session, index) =>
+          session.rows.length > 0 || index === sessions.length - 1,
+      )
       .reverse();
   }
 
   function formatMeter(row) {
-    if (row.meter === 0xFF) return '';
+    if (row.meter === 0xff) return '';
     if ((row.flags & FLAG_TX) !== 0) {
       return POWER_LABELS[row.meter] || `P${row.meter}`;
     }
@@ -222,14 +254,16 @@
   }
 
   function countDistinctMemoryChannels(rows) {
-    return new Set(Array.from(rows)
-      .filter(row => row.channel !== CHANNEL_NONE)
-      .map(row => {
-        const name = String(row.channelName || '').trim();
-        return name
-          ? `${row.frequency}:${name}`
-          : `${row.frequency}:#${row.channel}`;
-      })).size;
+    return new Set(
+      Array.from(rows)
+        .filter((row) => row.channel !== CHANNEL_NONE)
+        .map((row) => {
+          const name = String(row.channelName || '').trim();
+          return name
+            ? `${row.frequency}:${name}`
+            : `${row.frequency}:#${row.channel}`;
+        }),
+    ).size;
   }
 
   function spreadsheetSafe(value) {
@@ -252,17 +286,17 @@
       'channel',
       'channel_name',
       'signal_or_power',
-      'battery_volts'
+      'battery_volts',
     ];
 
     const lines = [headers.join(',')];
     Array.from(rows)
       .sort((a, b) => a.sequence - b.sequence)
-      .forEach(row => {
+      .forEach((row) => {
         const session = (row.flags & FLAG_SESSION) !== 0;
         const values = [
           row.sequence,
-          session ? 'POWER_ON' : ((row.flags & FLAG_TX) !== 0 ? 'TX' : 'RX'),
+          session ? 'POWER_ON' : (row.flags & FLAG_TX) !== 0 ? 'TX' : 'RX',
           session || !row.frequency ? '' : (row.frequency / 100000).toFixed(5),
           session ? '' : row.frequency,
           session ? '' : row.durationSeconds,
@@ -271,7 +305,7 @@
           session ? '' : formatMeter(row),
           session || row.battVolt === BATT_UNKNOWN
             ? ''
-            : ((BATT_OFFSET + row.battVolt) / 100).toFixed(2)
+            : ((BATT_OFFSET + row.battVolt) / 100).toFixed(2),
         ];
         lines.push(values.map(csvCell).join(','));
       });
@@ -283,7 +317,7 @@
   function featureKeepalive(restart) {
     let features = FEATURE_RF_LOG | FEATURE_RF_LOG_HISTORY;
     if (restart) features |= FEATURE_RF_LOG_RESTART;
-    return new Uint8Array([0x55, 0xAA, TYPE_RF_LOG, features]);
+    return new Uint8Array([0x55, 0xaa, TYPE_RF_LOG, features]);
   }
 
   return {
@@ -312,6 +346,6 @@
     groupRowsBySession,
     countDistinctMemoryChannels,
     rowsToCsv,
-    featureKeepalive
+    featureKeepalive,
   };
 });

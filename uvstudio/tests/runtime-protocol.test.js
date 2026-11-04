@@ -8,7 +8,7 @@ const vm = require('node:vm');
 
 const source = fs.readFileSync(
   path.join(__dirname, '..', 'js', 'runtime-protocol.js'),
-  'utf8'
+  'utf8',
 );
 
 function loadProtocol() {
@@ -22,8 +22,8 @@ function makeFirmwareReply(protocol, messageType, data) {
   const messageLength = packet[2] | (packet[3] << 8);
   const crcOffset = 4 + messageLength;
   const obfuscation = [
-    0x16, 0x6c, 0x14, 0xe6, 0x2e, 0x91, 0x0d, 0x40,
-    0x21, 0x35, 0xd5, 0x40, 0x13, 0x03, 0xe9, 0x80
+    0x16, 0x6c, 0x14, 0xe6, 0x2e, 0x91, 0x0d, 0x40, 0x21, 0x35, 0xd5, 0x40,
+    0x13, 0x03, 0xe9, 0x80,
   ];
   packet[crcOffset] = obfuscation[messageLength % 16] ^ 0xff;
   packet[crcOffset + 1] = obfuscation[(messageLength + 1) % 16] ^ 0xff;
