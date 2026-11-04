@@ -110,6 +110,13 @@ test('keeps the public version and its cache key aligned', () => {
   assert.match(html, new RegExp(`js/studio-version\\.js\\?v=${version.replaceAll('.', '\\.')}`));
 });
 
+test('keeps the F4HWN attribution and N7SIX adoption credit in UV Studio branding', () => {
+  assert.match(html, /<title>UV Studio by F4HWN · Adopted by N7SIX<\/title>/);
+  assert.match(html, /class="sb-sub">by F4HWN · Adopted by N7SIX<\/span>/);
+  assert.match(studioVersionSource, /by F4HWN · Adopted by N7SIX/);
+  assert.match(studioSource, /by F4HWN · Adopted by N7SIX/);
+});
+
 test('reconnects every runtime tool and refreshes device inventories', () => {
   assert.ok(flashSource.includes("navigator.serial.addEventListener('disconnect'"));
   assert.ok(serialSource.includes('navigator.serial.addEventListener("connect"'));
