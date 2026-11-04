@@ -123,7 +123,7 @@ test('offers the custom slot name before writing', () => {
 
 test('keeps the public version and its cache key aligned', () => {
   const version = studioVersionSource.match(
-    /UVSTUDIO_VERSION = "([^"]+)"/,
+    /UVSTUDIO_VERSION\s*=\s*["']([^"']+)["']/,
   )?.[1];
   assert.ok(version);
   assert.match(
