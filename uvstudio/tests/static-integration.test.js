@@ -17,6 +17,7 @@ const viewerSource = readSource('js/k5viewer.js');
 const serialSource = readSource('js/studio-serial.js');
 const studioSource = readSource('js/studio.js');
 const appCatalogSource = readSource('js/app-catalog.js');
+const flashCatalogSource = readSource('js/flash-catalog.js');
 const studioCss = fs.readFileSync(path.join(root, 'css', 'studio.css'), 'utf8');
 const toolsCss = fs.readFileSync(path.join(root, 'css', 'tools.css'), 'utf8');
 const coreCss = fs.readFileSync(path.join(root, 'css', 'core.css'), 'utf8');
@@ -136,6 +137,39 @@ test('keeps the F4HWN attribution and N7SIX adoption credit in UV Studio brandin
   assert.match(html, /class="sb-sub">by F4HWN · Adopted by N7SIX<\/span>/);
   assert.match(studioVersionSource, /by F4HWN · Adopted by N7SIX/);
   assert.match(studioSource, /by F4HWN · Adopted by N7SIX/);
+});
+
+test('offers separate Official N7SIX and F4HWN firmware pickers', () => {
+  const apex = html.indexOf('id="apexFirmwareCatalogSection"');
+  const f4hwn = html.indexOf('id="firmwareCatalogSection"');
+  assert.ok(apex > 0 && f4hwn > apex);
+  assert.match(
+    html,
+    /id="apexFirmwareCatalogLabel"[^>]*data-i18n="apex_catalog_label"/,
+  );
+  assert.match(html, /id="apexFirmwareCatalogSelect"/);
+  assert.match(
+    flashCatalogSource,
+    /const APEX_REPO = 'N7SIX\/UV-K1Series_ApeX-Edition_v7\.6\.0'/,
+  );
+  assert.match(flashCatalogSource, /function fetchApexFiles\(\)/);
+  assert.match(flashCatalogSource, /function isApexOffered\(entry\)/);
+});
+
+test('translates the Official N7SIX firmware picker in every locale', () => {
+  const localeDir = path.join(root, 'locales');
+  const files = fs
+    .readdirSync(localeDir)
+    .filter((file) => /^[a-z]{2}\.js$/.test(file));
+  files.forEach((file) => {
+    const context = { window: {} };
+    vm.runInNewContext(
+      fs.readFileSync(path.join(localeDir, file), 'utf8'),
+      context,
+    );
+    const dictionary = context.window.UVSTUDIO_LOCALES[file.slice(0, 2)];
+    assert.match(dictionary.apex_catalog_label, /N7SIX/, file);
+  });
 });
 
 test('reconnects every runtime tool and refreshes device inventories', () => {

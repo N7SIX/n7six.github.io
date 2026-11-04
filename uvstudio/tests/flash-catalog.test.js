@@ -14,6 +14,7 @@ const {
   isOffered,
   isSlotOffered,
   mergeCatalogFiles,
+  mergeApexFiles,
 } = catalog;
 
 // Real filenames from armel/uv-k1-k5v3-firmware-custom/archive.
@@ -174,6 +175,39 @@ test('routes model-specific and stock firmwares to their groups', () => {
   assert.equal(stock.model, 'K1');
 });
 
+test('routes N7SIX ApeX firmware to its own catalog group', () => {
+  assert.deepEqual(parseFirmwareName('n7six.ApeX-k1.v7.6.11.bin'), {
+    name: 'n7six.ApeX-k1.v7.6.11.bin',
+    brand: 'apex',
+    group: 'apex',
+    model: 'K1',
+    version: '7.6.11',
+    isBeta: false,
+    isSa818: false,
+    isDevelopment: false,
+  });
+  assert.equal(parseFirmwareName('n7six.ApeX-k5v3.v7.6.11.bin').model, 'K5v3');
+  assert.equal(parseFirmwareName('n7six.notes.v1.0.0.bin'), null);
+});
+
+test('merges only ApeX builds and supports release asset URLs', () => {
+  const merged = mergeApexFiles([
+    {
+      name: 'n7six.ApeX-k1.v7.6.11.bin',
+      size: 110196,
+      browser_download_url: 'https://x/n7six.ApeX-k1.v7.6.11.bin',
+    },
+    {
+      name: 'f4hwn.fusion.v7.6.11.bin',
+      size: 100000,
+      download_url: 'https://x/f4hwn.fusion.v7.6.11.bin',
+    },
+  ]);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].download_url, 'https://x/n7six.ApeX-k1.v7.6.11.bin');
+  assert.deepEqual(mergeApexFiles(null), []);
+});
+
 test('routes each stable F4HWN edition to its own catalog section', () => {
   assert.equal(parseFirmwareName('f4hwn.fusion.v5.8.0.bin').group, 'fusion');
   assert.equal(
@@ -233,6 +267,10 @@ test('offers every stable F4HWN edition in the multiboot slot picker', () => {
   );
   assert.equal(isSlotOffered(parseFirmwareName('f4hwn.labs.v6.0.0.bin')), true);
   assert.equal(
+    isSlotOffered(parseFirmwareName('n7six.ApeX-k1.v7.6.11.bin')),
+    true,
+  );
+  assert.equal(
     isSlotOffered(parseFirmwareName('f4hwn.fusion.v5.9.0.bin')),
     false,
   );
@@ -287,6 +325,7 @@ test('groups offered entries newest-first and drops everything else', () => {
       'transfer',
       'labs',
       'development',
+      'apex',
       'fusion_k1',
       'fusion_k5v3',
       'stock',
@@ -322,6 +361,7 @@ test('groups offered entries newest-first and drops everything else', () => {
   assert.equal(groups.get('fusion_k1').length, 0);
   assert.equal(groups.get('fusion_k5v3').length, 0);
   assert.equal(groups.get('stock').length, 2);
+  assert.equal(groups.get('apex').length, 0);
 });
 
 test('formats compact, human option labels', () => {
@@ -342,4 +382,7 @@ test('formats compact, human option labels', () => {
     size: 62000,
   };
   assert.match(formatOptionLabel(stock), /^K1 v7\.03\.01 · \d+ KB$/);
+
+  const apex = { group: 'apex', model: 'K1', version: '7.6.11', size: 110196 };
+  assert.match(formatOptionLabel(apex), /^K1 v7\.6\.11 · \d+ KB$/);
 });

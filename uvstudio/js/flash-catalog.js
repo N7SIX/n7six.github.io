@@ -35,6 +35,11 @@
   const DEVELOPMENT_API_URL =
     `https://api.github.com/repos/${REPO}/contents/${ARCHIVE_PATH}/${DEVELOPMENT_FILENAME}` +
     `?ref=${encodeURIComponent(DEVELOPMENT_BRANCH)}`;
+  const APEX_REPO = 'N7SIX/UV-K1Series_ApeX-Edition_v7.6.0';
+  const APEX_API_URL =
+    `https://api.github.com/repos/${APEX_REPO}/contents/${ARCHIVE_PATH}` +
+    `?ref=${encodeURIComponent(STABLE_BRANCH)}`;
+  const APEX_RELEASES_API_URL = `https://api.github.com/repos/${APEX_REPO}/releases/latest`;
   // Only current firmwares are offered: v5.0 and newer, no beta or SA818 builds.
   const MIN_MAJOR_VERSION = 5;
   // Multiboot first ships with v6; older images cannot return to the slot menu.
@@ -47,6 +52,7 @@
     'transfer',
     'labs',
     'development',
+    'apex',
     'fusion_k1',
     'fusion_k5v3',
     'stock',
@@ -57,6 +63,7 @@
     transfer: 'F4HWN Transfer',
     labs: 'F4HWN Labs',
     development: 'F4HWN Fusion (dev, unstable)',
+    apex: 'ApeX Edition',
     fusion_k1: 'F4HWN Fusion · K1',
     fusion_k5v3: 'F4HWN Fusion · K5v3',
     stock: 'Quansheng (stock)',
@@ -84,6 +91,15 @@
     if (isDevelopment) {
       brand = 'f4hwn';
       group = 'development';
+    } else if (lower.startsWith('n7six')) {
+      const apexMatch = lower.match(
+        /^n7six[._-]apex(?:[._-](k1|k5v3))?(?:[._-].*)?\.bin$/,
+      );
+      if (!apexMatch) return null;
+      brand = 'apex';
+      group = 'apex';
+      model =
+        apexMatch[1] === 'k1' ? 'K1' : apexMatch[1] === 'k5v3' ? 'K5v3' : '';
     } else if (lower.startsWith('quansheng')) {
       brand = 'stock';
       group = 'stock';
@@ -156,7 +172,7 @@
     return (
       Boolean(entry) &&
       isOffered(entry) &&
-      entry.brand === 'f4hwn' &&
+      (entry.brand === 'f4hwn' || entry.brand === 'apex') &&
       !entry.isDevelopment &&
       majorVersion(entry.version) >= MIN_SLOT_MAJOR_VERSION
     );
@@ -178,7 +194,8 @@
     return {
       name: file && file.name,
       size: file && file.size,
-      download_url: file && file.download_url,
+      download_url:
+        (file && (file.download_url || file.browser_download_url)) || null,
     };
   }
 
@@ -192,6 +209,15 @@
       files.push(normalizeFile(developmentFile));
     }
     return files;
+  }
+
+  function mergeApexFiles(apexFiles) {
+    return (Array.isArray(apexFiles) ? apexFiles : [])
+      .filter((file) => {
+        const parsed = parseFirmwareName(file && file.name);
+        return Boolean(parsed) && parsed.brand === 'apex';
+      })
+      .map(normalizeFile);
   }
 
   // Group GitHub file entries ({ name, size, download_url }) into an ordered map
@@ -220,7 +246,8 @@
   // Compact option label, e.g. "v5.7.0 · 58 KB" or "K1 v7.03.01 · 61 KB".
   function formatOptionLabel(entry) {
     const parts = [];
-    if (entry.group === 'stock' && entry.model) parts.push(entry.model);
+    if ((entry.group === 'stock' || entry.group === 'apex') && entry.model)
+      parts.push(entry.model);
     // Kept in English like the other technical tags (stable / dev / stock).
     if (entry.isDevelopment) parts.push('⚠ Development · unstable');
     else parts.push(entry.version ? `v${entry.version}` : entry.name);
@@ -239,18 +266,21 @@
     isOffered,
     isSlotOffered,
     mergeCatalogFiles,
+    mergeApexFiles,
   };
 
   // ========== BROWSER RUNTIME ==========
 
   function boot() {
+    const apexSelect = document.getElementById('apexFirmwareCatalogSelect');
+    const apexSection = document.getElementById('apexFirmwareCatalogSection');
     const select = document.getElementById('firmwareCatalogSelect');
     const section = document.getElementById('firmwareCatalogSection');
     const divider = document.getElementById('firmwareCatalogOr');
     const slotSelect = document.getElementById('slotFirmwareCatalogSelect');
     const slotSection = document.getElementById('slotFirmwareCatalogSection');
     const slotDivider = document.getElementById('slotFirmwareCatalogOr');
-    const selects = [select, slotSelect].filter(Boolean);
+    const selects = [apexSelect, select, slotSelect].filter(Boolean);
     if (!selects.length) return; // Catalog markup absent.
 
     // Purge the obsolete persistent listing cache written by earlier versions.
@@ -273,6 +303,7 @@
     }
 
     function showCatalog(flashVisible, slotVisible = flashVisible) {
+      if (apexSection) apexSection.hidden = !flashVisible;
       if (section) section.hidden = !flashVisible;
       if (divider) divider.hidden = !flashVisible;
       if (slotSection) slotSection.hidden = !slotVisible;
@@ -294,6 +325,36 @@
       } catch (error) {
         return null;
       }
+    }
+
+    async function fetchApexFiles() {
+      let archiveFiles = [];
+      try {
+        const response = await fetch(APEX_API_URL, { cache: 'no-cache' });
+        if (response.ok) archiveFiles = mergeApexFiles(await response.json());
+      } catch (error) {
+        archiveFiles = [];
+      }
+
+      let releaseFiles = [];
+      try {
+        const response = await fetch(APEX_RELEASES_API_URL, {
+          cache: 'no-cache',
+        });
+        if (response.ok) {
+          const release = await response.json();
+          releaseFiles = mergeApexFiles(release.assets || []);
+        }
+      } catch (error) {
+        releaseFiles = [];
+      }
+
+      const seen = new Set();
+      return archiveFiles.concat(releaseFiles).filter((file) => {
+        if (seen.has(file.name)) return false;
+        seen.add(file.name);
+        return true;
+      });
     }
 
     // Build the menu and return how many firmware options it holds.
@@ -335,10 +396,19 @@
       return optionCount;
     }
 
+    function isApexOffered(entry) {
+      return isOffered(entry) && entry.brand === 'apex';
+    }
+
+    function isFlashOffered(entry) {
+      return isOffered(entry) && entry.brand !== 'apex';
+    }
+
     function render() {
-      if (!groups) return { flash: 0, slots: 0 };
+      if (!groups) return { apex: 0, flash: 0, slots: 0 };
       return {
-        flash: select ? renderSelect(select) : 0,
+        apex: apexSelect ? renderSelect(apexSelect, isApexOffered) : 0,
+        flash: select ? renderSelect(select, isFlashOffered) : 0,
         slots: slotSelect ? renderSelect(slotSelect, isSlotOffered) : 0,
       };
     }
@@ -363,12 +433,21 @@
           throw new Error(`HTTP ${response.status}`);
         }
         const stableFiles = await response.json();
-        const developmentFile = await fetchDevelopmentFile();
-        const files = mergeCatalogFiles(stableFiles, developmentFile);
+        const [developmentFile, apexFiles] = await Promise.all([
+          fetchDevelopmentFile(),
+          fetchApexFiles(),
+        ]);
+        const files = mergeCatalogFiles(stableFiles, developmentFile).concat(
+          apexFiles,
+        );
         groups = categorize(files);
         const counts = render();
-        showCatalog(counts.flash > 0, counts.slots > 0);
-        loaded = counts.flash > 0 || counts.slots > 0;
+        if (apexSection) apexSection.hidden = counts.apex === 0;
+        if (section) section.hidden = counts.flash === 0;
+        if (divider) divider.hidden = counts.apex === 0 && counts.flash === 0;
+        if (slotSection) slotSection.hidden = counts.slots === 0;
+        if (slotDivider) slotDivider.hidden = counts.slots === 0;
+        loaded = counts.apex > 0 || counts.flash > 0 || counts.slots > 0;
         const slotEntries = [];
         groups.forEach((entries) => {
           const latest = entries.find(
@@ -393,14 +472,26 @@
       }
     }
 
+    function loadCatalogUrl(targetSelect) {
+      if (!targetSelect.value) return;
+      const flash = window.UVStudioFlash;
+      if (flash && typeof flash.loadFirmwareFromURL === 'function') {
+        flash.loadFirmwareFromURL(targetSelect.value);
+      }
+    }
+
+    if (apexSelect) {
+      apexSelect.addEventListener('change', () => {
+        loadCatalogUrl(apexSelect);
+        if (select && select.options.length) select.selectedIndex = 0;
+      });
+    }
+
     if (select) {
       select.addEventListener('change', () => {
-        const url = select.value;
-        if (!url) return;
-        const flash = window.UVStudioFlash;
-        if (flash && typeof flash.loadFirmwareFromURL === 'function') {
-          flash.loadFirmwareFromURL(url);
-        }
+        loadCatalogUrl(select);
+        if (apexSelect && apexSelect.options.length)
+          apexSelect.selectedIndex = 0;
       });
     }
 
@@ -420,16 +511,14 @@
       if (groups) render();
     });
 
-    // Mutual exclusivity: when a local file is picked, drop the catalog selection
-    // back to its placeholder so only one firmware source ever looks selected.
+    // Keep only one firmware source selected after choosing a local file.
     window.addEventListener('uvstudio:firmwareselect', (event) => {
-      if (
-        select &&
-        event.detail &&
-        event.detail.source === 'local' &&
-        select.options.length
-      ) {
-        select.selectedIndex = 0;
+      if (event.detail && event.detail.source === 'local') {
+        [apexSelect, select].forEach((catalogSelect) => {
+          if (catalogSelect && catalogSelect.options.length) {
+            catalogSelect.selectedIndex = 0;
+          }
+        });
       }
     });
 

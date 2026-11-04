@@ -316,6 +316,12 @@
             </div>
 
             <div class="tool-view active" id="flash-content" role="region">
+                <section class="section firmware-catalog" id="apexFirmwareCatalogSection" aria-labelledby="apexFirmwareCatalogLabel" hidden>
+                    <label id="apexFirmwareCatalogLabel" for="apexFirmwareCatalogSelect" data-i18n="apex_catalog_label">Official N7SIX firmware</label>
+                    <select id="apexFirmwareCatalogSelect" class="firmware-catalog-select">
+                        <option value="" disabled selected data-i18n="flash_catalog_placeholder">— Select a version —</option>
+                    </select>
+                </section>
                 <section class="section firmware-catalog" id="firmwareCatalogSection" aria-labelledby="firmwareCatalogLabel" hidden>
                     <label id="firmwareCatalogLabel" for="firmwareCatalogSelect" data-i18n="flash_catalog_label">Official F4HWN firmware</label>
                     <select id="firmwareCatalogSelect" class="firmware-catalog-select">
@@ -1050,7 +1056,7 @@
 <script src="js/keypad-detach.js?v=1"></script>
 <script src="js/firmware-package.js?v=1"></script>
 <script src="js/flash.js?v=106"></script>
-<script src="js/flash-catalog.js?v=20"></script>
+<script src="js/flash-catalog.js?v=21"></script>
 <script src="js/app-screens.js?v=8"></script>
 <script src="js/app-catalog.js?v=27"></script>
 <script src="js/app-submit.js?v=1"></script>

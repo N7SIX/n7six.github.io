@@ -1,6 +1,7 @@
 window.UVSTUDIO_LOCALES = window.UVSTUDIO_LOCALES || {};
 window.UVSTUDIO_LOCALES.fr = {
   flash_catalog_label: 'Firmware officiel F4HWN',
+  apex_catalog_label: 'Firmware officiel N7SIX',
   flash_catalog_placeholder: '— Choisir une version —',
   flash_catalog_or: 'ou charger un fichier local',
   slot_catalog_label: 'Firmware F4HWN compatible multiboot',

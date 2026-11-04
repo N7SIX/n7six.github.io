@@ -1,6 +1,7 @@
 window.UVSTUDIO_LOCALES = window.UVSTUDIO_LOCALES || {};
 window.UVSTUDIO_LOCALES.ru = {
   flash_catalog_label: 'Официальная прошивка F4HWN',
+  apex_catalog_label: 'Официальная прошивка N7SIX',
   flash_catalog_placeholder: '— Выберите версию —',
   flash_catalog_or: 'или загрузить локальный файл',
   slot_catalog_label: 'Прошивка F4HWN с поддержкой multiboot',
