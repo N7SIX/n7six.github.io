@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Page not found</title>
+    <script>
+      // GitHub Pages paths are case-sensitive: map lowercase URLs to the real folder names.
+      (function () {
+        var folders = ['UVStudio', 'UVTools', 'uvtools2', 'k5viewer'];
+        var parts = location.pathname.split('/');
+        for (var i = 0; i < folders.length; i++) {
+          if (parts[1] && parts[1].toLowerCase() === folders[i].toLowerCase() && parts[1] !== folders[i]) {
+            parts[1] = folders[i];
+            location.replace(parts.join('/') + location.search + location.hash);
+            return;
+          }
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <h1>Page not found</h1>
+    <p><a href="/">Back to home</a> · <a href="/UVStudio/">UV Studio</a></p>
+  </body>
+</html>
