@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UV Studio</title>
+</head>
+<body>
+  <!-- Core modules in dependency order -->
+  <script src="js/studio-version.js"></script>
+  <script src="js/studio-preferences.js"></script>
+  <script src="locales/en.js"></script>
+  <script src="js/studio-i18n.js"></script>
+  <script src="js/rf-log.js"></script>
+  <script src="js/studio-serial.js"></script>
+  <script src="js/runtime-protocol.js"></script>
+  <script src="js/firmware-package.js"></script>
+  <script src="js/k5viewer.js"></script>
+  <script src="js/flash.js"></script>
+  <script src="js/flash-catalog.js"></script>
+  <script src="js/app-catalog.js"></script>
+
+  <!-- Feature modules -->
+  <script src="js/background-keepalive.js"></script>
+  <script src="js/studio-flash-counter.js"></script>
+  <script src="js/keypad-detach.js"></script>
+  <script src="js/app-screens.js"></script>
+  <script src="js/app-submit.js"></script>
+
+  <!-- Shell (loads last to coordinate everything) -->
+  <script src="js/studio.js"></script>
+</body>
+</html>
