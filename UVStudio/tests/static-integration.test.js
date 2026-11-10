@@ -249,7 +249,7 @@ test('offers separate Official N7SIX and F4HWN firmware pickers', () => {
   assert.ok(apex > 0 && firmware > 0 && apex < firmware);
   assert.match(
     html,
-    /id="apexFirmwareCatalogLabel"[^>]*data-i18n="apex_catalog_label"/,
+    /id="apexFirmwareCatalogLabel"[^>]*data-i18n="official_n7six_firmware"/,
   );
   assert.match(html, /id="apexFirmwareCatalogSelect"/);
   const catalogSource = fs.readFileSync(
@@ -883,7 +883,7 @@ test('translates the Official N7SIX picker label in every locale', () => {
   const files = fs
     .readdirSync(localeDir)
     .filter((file) => /^[a-z]{2}\.js$/.test(file));
-  assert.match(html, /data-i18n="apex_catalog_label"/);
+  assert.match(html, /data-i18n="official_n7six_firmware"/);
   files.forEach((file) => {
     const context = { window: {} };
     vm.runInNewContext(
@@ -891,11 +891,14 @@ test('translates the Official N7SIX picker label in every locale', () => {
       context,
     );
     const dictionary = context.window.UVSTUDIO_LOCALES[file.slice(0, 2)];
-    assert.ok(dictionary.apex_catalog_label, `${file}:apex_catalog_label`);
-    assert.match(dictionary.apex_catalog_label, /N7SIX/, file);
+    assert.ok(
+      dictionary.official_n7six_firmware,
+      `${file}:official_n7six_firmware`,
+    );
+    assert.match(dictionary.official_n7six_firmware, /N7SIX/, file);
     if (file !== 'en.js') {
       assert.notEqual(
-        dictionary.apex_catalog_label,
+        dictionary.official_n7six_firmware,
         'Official N7SIX firmware',
         file,
       );

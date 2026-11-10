@@ -1065,7 +1065,7 @@ function logDeviceInfo(data) {
     const versionMatch = deviceInfoStr.match(/v(\d+\.\d+\.\d+)/);
     if (versionMatch) {
       const version = versionMatch[1];
-      const [major] = version.split('.').map(Number);
+      const major = Number(version.split('.')[0]);
 
       // Set CALIB_OFFSET based on version
       if (major >= 5) {

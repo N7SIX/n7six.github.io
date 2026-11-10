@@ -50,8 +50,8 @@ function createRuntime(initialStorage) {
         fr: { sample: 'Français' },
         de: { sample: 'Deutsch' },
       },
-      dispatchEvent() {},
       addEventListener() {},
+      dispatchEvent() {},
       updateUI() {
         updateCount++;
       },
