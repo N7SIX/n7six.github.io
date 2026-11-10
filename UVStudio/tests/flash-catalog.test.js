@@ -225,6 +225,20 @@ test('routes ApeX Edition builds to their own catalog section', () => {
   assert.equal(parseFirmwareName('n7six.fusion.v6.0.0.bin'), null);
 });
 
+test('routes ApeXLabs Edition builds to their own catalog section', () => {
+  assert.deepEqual(parseFirmwareName('n7six.ApeXLabs-k1.v7.6.13.bin'), {
+    name: 'n7six.ApeXLabs-k1.v7.6.13.bin',
+    brand: 'apex',
+    group: 'apex',
+    model: 'K1',
+    version: '7.6.13',
+    isBeta: false,
+    isSa818: false,
+    isDevelopment: false,
+  });
+  assert.equal(parseFirmwareName('n7six.ApeXLabs-k5v3.v7.6.13.bin').model, 'K5v3');
+});
+
 test('sorts versions numerically, not alphabetically', () => {
   assert.ok(compareVersionDesc('5.10.0', '5.9.0') < 0); // 5.10 is newer
   assert.ok(compareVersionDesc('5.9.0', '5.10.0') > 0);

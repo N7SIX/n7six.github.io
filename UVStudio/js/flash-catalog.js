@@ -91,9 +91,10 @@
       brand = 'f4hwn';
       group = 'development';
     } else if (lower.startsWith('n7six')) {
-      // ApeX Edition builds, e.g. n7six.ApeX-k1.v7.6.12.bin.
+      // ApeX Edition builds, e.g. n7six.ApeX-k1.v7.6.12.bin,
+      // n7six.ApeXLabs-k1.v7.6.13.bin.
       const apexMatch = lower.match(
-        /^n7six[._-]apex(?:[._-](k1|k5v3))?(?:[._-].*)?\.bin$/,
+        /^n7six[._-]apex(?:labs)?(?:[._-](k1|k5v3))?(?:[._-].*)?\.bin$/,
       );
       if (!apexMatch) return null;
       brand = 'apex';
