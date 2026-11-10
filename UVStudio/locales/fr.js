@@ -24,6 +24,19 @@ window.UVSTUDIO_LOCALES.fr = {
   connectBtn: 'Connecter au port série',
   disconnectBtn: 'Déconnecter',
   flashBtn: 'Flasher le firmware',
+  flash_step_image: 'Flashage du firmware',
+  flash_step_restart: 'Redémarrage de la radio',
+  flash_step_assets: 'Écriture des assets',
+  flash_step_image_hint: 'Mode DFU',
+  flash_step_restart_hint: 'Automatique',
+  flash_step_assets_hint: 'Polices, menus',
+  flash_step_done: 'Terminé',
+  flash_step_waiting: 'En attente de la radio…',
+  flash_step_detected: 'Radio détectée',
+  flash_step_failed: 'Échec',
+  flash_steps_title: 'Installation en 3 étapes',
+  flash_unplug_warning: 'Gardez le câble branché jusqu’à la fin',
+  flash_unplug_done: 'Terminé : vous pouvez débrancher le câble',
   dumpBtn: 'Lire les données de calibration',
   restoreBtn: 'Restaurer les données de calibration',
   logTitle: 'Console',
@@ -310,43 +323,81 @@ window.UVSTUDIO_LOCALES.fr = {
   slotStateBadSlot: 'slot invalide',
   slotStateAuth: 'erreur auth',
   slotStateError: 'erreur',
+  slotStateMismatch: 'assets d’un autre build',
+  flashAssetsBtn: 'Installer les assets du firmware',
+  fwAssetsDetected:
+    'Assets du firmware inclus ({0} octets) : ils sont écrits après le flashage.',
+  fwPackageInvalid: 'Fichier firmware endommagé {0} : {1}',
+  fwAssetsImageDone:
+    'Image du firmware programmée. Ne débranchez pas le câble : ses assets doivent encore être écrits.',
+  fwAssetsWaitRadio:
+    'Attente du nouveau firmware (redémarrez la radio normalement si elle ne le fait pas d’elle-même) : ses assets seront écrits automatiquement...',
+  fwAssetsReconnect:
+    'Assets pas encore écrits : allumez la radio normalement, puis cliquez sur « Installer les assets du firmware ».',
+  fwAssetsWriting: 'Écriture des assets du firmware (polices, menus)...',
+  fwAssetsWriteOk: 'Assets du firmware écrits et vérifiés.',
+  fwAssetsError: 'Erreur des assets du firmware : {0}',
+  fwAssetsWrongFirmware:
+    'Ces assets appartiennent à un autre build du firmware : flashez d’abord le firmware correspondant.',
+  slotNeedsV7Running:
+    'Le firmware {0} installé sur votre radio est trop ancien pour installer la version sélectionnée dans un slot.',
+  slotNeedsV7:
+    'Passez d’abord le firmware principal à 7.0 ou ultérieur, puis réessayez.',
+  slotAssetsBlockedTitle: 'Mise à jour requise',
+  fwAssetsSlotRunning:
+    'Le slot {0} est en cours d’exécution : après sa restauration, installez ses assets avec « Installer les assets du firmware ».',
   infoBoxSlots:
     '<strong>Note :</strong> Cette application nécessite Chrome/Edge/Opera ou Firefox 151+ sur ordinateur. Assurez-vous que la radio est en <strong>mode Normal</strong> et exécute un firmware Fusion avec multiboot activé.',
   studio_nav_apps: 'Apps',
   studio_nav_labs_only: 'Labs uniquement',
+  studio_nav_service_only: 'Service uniquement',
+  studio_nav_fusion_only: 'Fusion uniquement',
+  studio_nav_unavailable_edition:
+    'Indisponible pour l’édition du firmware connecté',
+  studio_edition_unavailable_body:
+    'Le firmware connecté ne prend pas en charge cette rubrique.',
   appsDescription:
-    "Installez de petites apps overlay (.app) dans la flash externe de la radio et lancez-les depuis le menu F + 7. L'écriture ne touche que la flash externe, la radio reste utilisable.",
-  app_catalog_label: 'Apps overlay officielles F4HWN',
-  apex_app_catalog_label: 'Apps overlay officielles N7SIX',
+    'Installez uniquement les outils dont vous avez besoin. Les apps se lancent depuis le menu F + 7 de la radio.',
+  app_catalog_label: 'Apps overlay officielles',
   app_catalog_version_label: 'Version du firmware',
   app_catalog_version_placeholder: '— Choisir une version du firmware —',
   app_catalog_app_label: 'Application',
   app_catalog_app_placeholder: '— Choisir une app —',
+  appLocalBuild: 'Custom',
+  appLocalBuildFolder: 'Custom · {0}',
+  appLocalBuildChange: 'Changer…',
   app_catalog_or: 'ou charger un fichier local',
   appColName: 'Nom',
-  appColUpdate: 'Mise à jour',
+  appColActions: 'Actions',
   updateCurrent: 'À jour',
   appColSize: 'Taille',
-  appsRefresh: 'Actualiser les apps',
+  appSizeCode: '{0} code',
+  appSizeAssets: '{0} assets',
+  appsRefresh: 'Lire les apps de la radio',
   appFileLabel: 'Fichier app (.app)',
   appTargetLabel: 'Slot cible',
   appInstallBtn: "Installer l'app",
   appDelete: 'Supprimer',
+  appDeleteAll: 'Tout supprimer',
+  appDeleteAllTitle: 'Supprimer toutes les applications ?',
+  appDeleteAllConfirm:
+    'Les {0} applications installées seront définitivement supprimées de la radio. Continuer ?',
+  appDeleteAllDone: 'Toutes les applications ont été supprimées.',
   appUpdateAction: 'Mettre à jour vers {0}',
+  appUpdateShort: 'Mise à jour',
   appDetected: 'Détecté : {0} · {1} · {2} Ko',
   appTooBig: "Cette app dépasse la taille de l'overlay de 4 Kio.",
   appBadFile: 'Fichier .app invalide (en-tête incorrect).',
   appsScanning: "Analyse des slots d'apps…",
   appsScanDone: 'Analyse des apps terminée.',
   appsError: 'Erreur apps : {0}',
-  labsRequiredTitle: 'Édition Labs requise',
-  labsRequiredBody:
-    "La fonction <strong>{0}</strong> n'est pas prise en charge par le firmware actuellement flashé. Installez l'<strong>édition Labs</strong> pour l'utiliser.",
   appUnsupportedLog: 'Firmware {0} sans support des apps overlay.',
   appUnknownFirmware: 'inconnu',
   appClose: 'Fermer',
   appInstalling: "Écriture de l'app dans le slot {0}…",
   appInstalled: 'App installée dans le slot {0}.',
+  appInstalledIncompatible:
+    'App installée dans le slot {0}, mais ce firmware ne peut pas la lancer : {1}.',
   appErasing: "Effacement du slot d'app {0}…",
   appErased: "Slot d'app {0} effacé.",
   appVerifying: "Vérification du slot d'app {0}…",
@@ -360,6 +411,7 @@ window.UVSTUDIO_LOCALES.fr = {
   appStateCrc: 'erreur CRC',
   appStateVma: 'VMA incompatible',
   appStateAuth: "erreur d'auth",
+  appStateCap: 'non supportée par ce firmware',
   infoBoxApps:
     "<strong>Note :</strong> Cette application nécessite Chrome/Edge/Opera ou Firefox 151+ sur ordinateur. Assurez-vous que la radio est en <strong>mode Normal</strong> et exécute l'édition <strong>Labs</strong>, le seul firmware qui inclut les apps overlay.",
   studio_nav_calibration: 'Calibration',
@@ -411,7 +463,7 @@ window.UVSTUDIO_LOCALES.fr = {
   flashRestoreError: 'Erreur de flash externe à 0x{0}',
   flashVerifyError: 'Échec de vérification de la flash externe à 0x{0}',
   flashUnsupported:
-    "Ce firmware ne prend pas en charge l'accès complet à la flash externe. Installez d'abord l'édition Labs.",
+    'L’accès complet à la flash externe est indisponible pour l’édition du firmware connecté.',
   flashCalibrationPreserved:
     "Secteur de calibration propre à l'appareil préservé.",
   studio_nav_upload_logo: 'Envoyer',
@@ -471,7 +523,192 @@ window.UVSTUDIO_LOCALES.fr = {
   studio_operation_dump_logo: 'Lecture du logo…',
   studio_operation_dump_flash: 'Lecture de la flash externe…',
   studio_operation_restore_flash: 'Restauration de la flash externe…',
+  studio_operation_apps_reorder: 'Réorganisation des apps…',
+  studio_operation_apps_renumber: 'Renumérotation des apps…',
   studio_operation_factory_reset: 'Retour usine de l’UV-K1 en cours…',
   studio_operation_export_rf_log: 'Export du RF Log…',
   toggle_menu: 'Afficher/masquer le menu',
+  appManagerEyebrow: 'GESTIONNAIRE D’APPS',
+  appManagerRadioPending: 'En attente de la radio…',
+  appManagerConnectHint: 'Connectez la radio pour vérifier la compatibilité',
+  appManagerTabsLabel: 'Gestion des apps',
+  appManagerInstalled: 'Installées',
+  appManagerCatalog: 'Catalogue',
+  appManagerOnRadio: 'Sur votre radio',
+  appManagerInstalledHint:
+    'Seules les apps installées apparaissent dans le menu de la radio.',
+  appOrderApply: 'Appliquer l’ordre',
+  appRenumber: 'Renuméroter',
+  appOrderCancel: 'Annuler',
+  appOrderReading: 'Lecture des slots d’apps…',
+  appOrderWriting: 'Écriture de l’ordre des apps…',
+  appOrderDone: 'Ordre des apps mis à jour.',
+  appRenumberDone: 'Apps renumérotées.',
+  appOrderApplyFirst:
+    'Appliquez ou annulez le nouvel ordre avant de continuer.',
+  appManagerCategories: 'Catégories',
+  appCategoryAll: 'Toutes',
+  appCategoryRadio: 'Radio et Signaux',
+  appCategoryTools: 'Outils',
+  appCategoryGames: 'Jeux',
+  appCategoryDemos: 'Démos',
+  appCategoryOther: 'Autres',
+  appManagerSearch: 'Rechercher une app…',
+  appManagerNoResults: 'Aucune app ne correspond à cette recherche.',
+  appManagerLocalInstall: 'Installer une app locale',
+  appManagerNoInstalled: 'Aucune app installée sur cette radio.',
+  appManagerInstalledCount: '{0} apps installées',
+  appManagerCapacity: '{0} slots utilisés sur {1}',
+  appManagerCheckingCompatibility:
+    'Vérification de la compatibilité du catalogue…',
+  appManagerCatalogCompatible: 'Radio connectée · Catalogue compatible',
+  appManagerCatalogUnavailable: 'Aucun catalogue pour ce firmware',
+  appManagerResultCount: '{0} apps compatibles',
+  appCatalogScreens: 'Captures',
+  appCatalogScreensHint: 'Afficher ou masquer les captures d’écran des apps',
+  appScreenshotAlt: 'Capture d’écran de {0}',
+  appManagerCommunity: 'Communauté',
+  appCommunityBadgeHint: 'Partagée par son auteur, non vérifiée par F4HWN',
+  appCommunityBanner:
+    'Apps partagées par leurs auteurs, non vérifiées par F4HWN. Installez-les seulement si vous faites confiance à leur auteur.',
+  appCommunityLoading: 'Lecture des apps de la communauté…',
+  appCommunityNone:
+    'Aucune app de la communauté pour l’instant. Vous en avez fait une ? Proposez-la ci-dessous.',
+  appCommunityUnavailable:
+    'Impossible de lire les apps de la communauté. Vérifiez votre connexion.',
+  appCommunityGone: '{0} a été retirée du catalogue de la communauté.',
+  appCommunityResultCount: '{0} apps',
+  appCommunityLocalButton: 'Installer un .app',
+  appCommunitySubmitButton: 'Proposer une app',
+  appManual: 'Manuel',
+  appCommunityWarningTitle: 'Installer une app de la communauté ?',
+  appCommunityWarningBody:
+    '{0} est partagée par {1}. Les apps de la communauté ne sont pas vérifiées par F4HWN : une app s’exécute sur la radio avec un accès complet, émission comprise. Installez-la seulement si vous faites confiance à son auteur.',
+  appCommunityWarningConfirm: 'Installer',
+  appCommunityHashMismatch:
+    'L’app téléchargée ne correspond pas au catalogue : réessayez dans quelques minutes.',
+  appSubmitTitle: 'Proposer une app à la communauté',
+  appSubmitIntro:
+    'Partagez une app que vous avez créée : UV Studio la vérifie ici, puis ouvre GitHub avec la soumission prête à envoyer.',
+  appSubmitAccount: 'Un compte GitHub est nécessaire.',
+  appSubmitScreen: 'Capture d’écran',
+  appSubmitCapture: 'Capturer l’écran de la radio',
+  appSubmitScreenHint:
+    'Connectez la radio, lancez l’app dessus, puis capturez son écran.',
+  appSubmitScreenOk: 'Écran prêt : vérifiez-le dans l’aperçu ci-dessous.',
+  appSubmitCaptureFailed: 'La radio n’a pas envoyé son écran : réessayez.',
+  appSubmitRadioBusy:
+    'La radio est occupée par une autre opération : réessayez dans un instant.',
+  appSubmitNoRadio:
+    'Aucune radio connectée : connectez-la avec l’app lancée dessus, puis capturez à nouveau.',
+  appSubmitAuthor: 'Auteur',
+  appSubmitAuthorHint: 'Pseudo ou indicatif',
+  appSubmitCategory: 'Catégorie',
+  appSubmitDescription: 'Description',
+  appSubmitDescriptionHint: 'Une phrase en anglais',
+  appSubmitSource: 'Manuel : README ou page wiki (facultatif)',
+  appSubmitAgreeTested: 'J’ai testé cette app sur ma radio.',
+  appSubmitAgreeRights:
+    'J’ai le droit de distribuer cette app et j’accepte sa redistribution par UV Studio.',
+  appSubmitAgreeRemoval:
+    'Je comprends que l’app peut être retirée du catalogue à tout moment.',
+  appSubmitPreview: 'Aperçu dans le catalogue',
+  appSubmitSend: 'Ouvrir la soumission sur GitHub',
+  appSubmitSignIn: 'Connectez-vous à GitHub avant de cliquer.',
+  appSubmitAppOk: '{0} v{1} : app valide (niveau d’API {2}).',
+  appSubmitNotApp: 'Ce fichier n’est pas une app overlay.',
+  appSubmitAbi:
+    'Cette app a été compilée pour une autre génération du firmware (ABI {0}).',
+  appSubmitTooNew:
+    'Cette app demande le niveau d’API {0} ; le firmware actuel fournit le niveau {1}.',
+  appSubmitCaps:
+    'Cette app demande des capacités que le firmware ne fournit pas (0x{0}).',
+  appSubmitDamaged: 'Ce .app est endommagé ou mal compilé ({0}).',
+  appSubmitTaken: 'Une app officielle s’appelle déjà {0} : renommez la vôtre.',
+  appSubmitNeedApp: 'Choisissez d’abord un fichier .app valide.',
+  appSubmitNeedScreen: 'Ajoutez d’abord une capture d’écran de l’app.',
+  appSubmitOpened:
+    'GitHub s’est ouvert dans un nouvel onglet : **vérifiez la soumission, puis cliquez sur Create**. Un bot répond en quelques minutes. Si GitHub a demandé de vous connecter puis affiché une erreur, cliquez à nouveau sur le bouton : la connexion est faite.',
+  appSubmitCopied:
+    'L’app est trop grosse pour un lien : la soumission est copiée. Sur GitHub, collez-la dans la description (Ctrl+V ou Cmd+V), puis cliquez sur Create.',
+  appManagerForFirmware: 'pour Labs v{0}',
+  appManagerScanBeforeInstall: 'Actualisez la radio avant d’installer une app',
+  appManagerNoFreeSlot: 'Aucun slot d’app n’est disponible.',
+  appDescription_acarsrx:
+    'Réception et décodage des messages ACARS des avions.',
+  appDescription_afscope:
+    'Oscilloscope et accordeur pour l’audio reçu : forme d’onde, fréquencemètre et aiguille de tonalité.',
+  appDescription_afspectro:
+    'Spectre et sonogramme de l’audio reçu : pics principaux et écart de niveau entre deux tonalités.',
+  appDescription_aisrx:
+    'Réception des rapports AIS des navires : nom, position, vitesse, route, destination et données Inland.',
+  appDescription_aprsdigi: 'Relais des paquets APRS en digipeater.',
+  appDescription_aprsedit:
+    'Édition de la balise d’APRS TX : indicatif, position, symbole et commentaire.',
+  appDescription_aprsrx: 'Réception et décodage des paquets APRS.',
+  appDescription_aprstx: 'Émission de balises APRS depuis la radio.',
+  appDescription_atisdscrx:
+    'Réception des appels ASN (DSC) marins du canal 70 : détresse, urgence, émetteur et position.',
+  appDescription_atisrx:
+    'Identification des bateaux fluviaux par leur signal ATIS.',
+  appDescription_beacon: 'Émission d’une balise radio configurable.',
+  appDescription_beam: 'Transfert d’un canal entre radios compatibles.',
+  appDescription_breakout: 'Une version compacte du jeu d’arcade classique.',
+  appDescription_broadcastfm: 'Écoute des stations de radiodiffusion FM.',
+  appDescription_cwdecode: 'Décodage du Morse en temps réel.',
+  appDescription_cwkeyer:
+    'Manipulateur Morse utilisant les touches PTT et latérales du poste.',
+  appDescription_cwmem:
+    'Envoi de messages Morse mémorisés depuis CW Keyer ou CW USB.',
+  appDescription_cwmemedit:
+    'Modification de l’indicatif et des messages personnalisés utilisés par CW Mem.',
+  appDescription_cwqsoauto:
+    'Envoie et répète automatiquement 16 messages Morse personnalisables pour les contacts CW.',
+  appDescription_cwtrainer:
+    'Apprentissage et pratique du Morse : manipulation libre décodée en direct, exercices de lecture au son et d’écoute-reproduction.',
+  appDescription_cwusb:
+    'Manipulateur Morse pour une clé externe reliée au port USB-C.',
+  appDescription_cube3d: 'Démonstration graphique 3D animée.',
+  appDescription_epirb406: 'Analyse et décodage des trames de balises 406 MHz.',
+  appDescription_flashmap:
+    'Carte de la flash externe : slots firmware, apps, état actif, registres de sécurité et visualiseur hexadécimal.',
+  appDescription_foxhunt: 'Assistance à la radiogoniométrie.',
+  appDescription_geonav:
+    'Azimut, distance et élévation d’une radiosonde vue de la position APRS, à ouvrir depuis Sonde M10, M20, MRZ ou RS41.',
+  appDescription_hellmaze:
+    'Jeu de tir à la première personne dans un labyrinthe hanté par des démons.',
+  appDescription_kisstnc:
+    'La radio comme TNC KISS en USB-C : APRSdroid ou tout client KISS, AFSK 1200 bauds.',
+  appDescription_minesweeper: 'Le classique jeu de déminage.',
+  appDescription_plasma: 'Démonstration graphique plasma animée.',
+  appDescription_pocsagrx:
+    'Réception des messages de radiomessagerie POCSAG (DAPNET).',
+  appDescription_qrmap:
+    'Affichage d’une position reçue d’une autre app sous forme de QR code à scanner avec un téléphone pour l’ouvrir sur une carte.',
+  appDescription_rapidroll: 'Jeu d’arcade vertical rapide.',
+  appDescription_resistor:
+    'Lecture du code couleur des résistances : valeur, tolérance et coefficient de température (3 à 6 bandes).',
+  appDescription_scan406:
+    'Balayage de tous les canaux Cospas-Sarsat à 406 MHz et transfert à EPIRB 406 des rafales détectées de balises de première génération.',
+  appDescription_sigfinder:
+    'Recherche de la direction et du niveau d’un signal.',
+  appDescription_snake: 'Le classique Snake adapté au clavier de la radio.',
+  appDescription_sokoban: 'Le classique jeu de caisses à pousser.',
+  appDescription_sondem10:
+    'Décodage des radiosondes Meteomodem M10 : identifiant, position, altitude, température.',
+  appDescription_sondem20:
+    'Décodage des radiosondes Meteomodem M20 : identifiant, position, altitude, température.',
+  appDescription_sondemrz:
+    'Décodage des radiosondes MRZ-N1 / MP3-H1 : identifiant, position, altitude, température, humidité, vitesse et cap.',
+  appDescription_sonders41:
+    'Décodage des radiosondes Vaisala RS41 : identifiant, position, altitude, vitesse verticale, nombre de satellites.',
+  appDescription_spaceimpact: 'Jeu d’arcade spatial à défilement horizontal.',
+  appDescription_spectrum3d: 'Visualisation expérimentale du spectre en 3D.',
+  appDescription_sstv: 'Réception d’images SSTV sur l’écran de la radio.',
+  appDescription_systeminfo:
+    'Informations sur le firmware, la mémoire et la radio.',
+  appDescription_tetris: 'Le classique jeu de blocs qui tombent.',
+  appDescription_tonecall:
+    'Émission de séquences d’appel sélectif ZVEI ou CCIR configurables.',
+  appDescription_other: 'App overlay pour F4HWN Labs.',
 };

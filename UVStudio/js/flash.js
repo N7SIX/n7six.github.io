@@ -60,6 +60,7 @@
   const FLASH_ERASE_TIMEOUT_MS = 3000;
   const FLASH_CRC_PROBE_TIMEOUT_MS = 1000;
   const FLASH_COMMAND_RETRIES = 3;
+  const NAVIGATION_PROBE_TIMEOUT_MS = 1000;
   // Calibration is device-specific. Restore deliberately leaves its entire erase
   // sector untouched; the boot logo begins in the following sector at 0x011000.
   const FLASH_CALIBRATION_SECTOR = 0x010000;
@@ -122,6 +123,13 @@
   let reader = null;
   let writer = null;
   let firmwareData = null;
+  // Asset pack (fonts, menu texts) carried by the selected firmware package, or
+  // null for a binary-only firmware. firmwareData then holds the image alone.
+  let firmwareAssets = null;
+  // Asset pack still to be written into the running slot of the radio: set when
+  // a flash (or a slot write) could not write it, and cleared once written. The
+  // "Install firmware assets" button exists only for it.
+  let pendingFirmwareAssets = null;
   let firmwareFileName = 'firmware.bin';
   // Out-of-order guard: only the most recent selection may commit firmwareData.
   let firmwareLoadSeq = 0;
@@ -142,21 +150,22 @@
   let toolsSerialSession = 0;
   let rfLogDownloadUrl = null;
   const serialSupported = 'serial' in navigator;
+  let toolsLastPortInfo = null;
+  let toolsHardwareDisconnectPromise = null;
+  let toolsRefreshPending = false;
 
   // Firmware Slots state
   let slotImage = null; // Uint8Array of the selected .bin
+  let slotAssets = null; // asset pack of the selected firmware package, or null
   let slotMeta = { name: '', fwVersion: '' };
   // Out-of-order guard for the slot image picker (catalog or local file).
   let slotImageLoadSeq = 0;
   let slotImageLoadAbort = null;
-  let slotAutoReconnecting = false;
-  let slotReconnectTimer = null;
-  let slotReconnectInProgress = false;
-  let slotLastPortInfo = null;
-  let slotHardwareDisconnectPromise = null;
-  let slotRefreshPending = false;
   let slotLatestVersions = new Map();
   let slotUpdateDownloadPending = false;
+  let connectedFirmwareName = '';
+  let firmwareNavigationConnected = false;
+  let navigationCapabilities = null;
 
   // Logo state
   let logoSourceImage = null; // HTMLImageElement of the user-picked file
@@ -164,6 +173,8 @@
 
   // ========== UI ELEMENTS ==========
   const flashBtn = document.getElementById('flashBtn');
+  const flashAssetsBtn = document.getElementById('flashAssetsBtn');
+  const flashSteps = document.getElementById('flashSteps');
   const dumpBtn = document.getElementById('dumpBtn');
   const restoreBtn = document.getElementById('restoreBtn');
   const firmwareFileInput = document.getElementById('firmwareFile');
@@ -191,6 +202,7 @@
   const flashRestoreConfirmModal = document.getElementById(
     'flashRestoreConfirmModal',
   );
+  const slotAssetsModal = document.getElementById('slotAssetsModal');
   const flashRestoreConfirmClose = document.getElementById(
     'flashRestoreConfirmClose',
   );
@@ -224,6 +236,18 @@
   const chirpDriverDownload = document.getElementById('chirpDriverDownload');
   const chirpDriverLink = document.getElementById('chirpDriverLink');
   const chirpDriverText = document.getElementById('chirpDriverText');
+  const appsNavigationItem = document.querySelector('[data-route="apps"]');
+  const externalFlashNavigationItem = document.querySelector(
+    '[data-route="external-flash"]',
+  );
+  const factoryResetNavigationItem = document.querySelector(
+    '[data-route="factory-reset"]',
+  );
+  const appsNavigationTag = appsNavigationItem?.querySelector('.tag');
+  const externalFlashNavigationTag =
+    externalFlashNavigationItem?.querySelector('.tag');
+  const factoryResetNavigationTag =
+    factoryResetNavigationItem?.querySelector('.tag');
 
   // File input labels
   const fileLabel = document.getElementById('fileLabel');
@@ -291,8 +315,207 @@
     return window.uvStudioI18n ? window.uvStudioI18n.t(key, ...args) : key;
   }
 
+  function firmwareUsesServiceNavigation(deviceInfoName) {
+    const match = String(deviceInfoName || '').match(/\bv(\d+)(?:\.(\d+))?/i);
+    if (!match) return false;
+
+    // Historical compact versions use v50 for v5.0 and v70 for v7.0.
+    // Dotted versions expose the major component directly.
+    if (match[2] !== undefined) return Number(match[1]) >= 7;
+    const compactVersion = Number(match[1]);
+    return match[1].length === 1 ? compactVersion >= 7 : compactVersion >= 70;
+  }
+
+  function updateNavigationTag(element, key, hidden) {
+    if (!element) return;
+    element.hidden = hidden;
+    element.setAttribute('data-i18n', key);
+    element.textContent = t(key);
+  }
+
+  function renderFirmwareNavigationTags() {
+    if (!firmwareNavigationConnected) {
+      updateNavigationTag(appsNavigationTag, 'studio_nav_labs_only', true);
+      updateNavigationTag(
+        externalFlashNavigationTag,
+        'studio_nav_labs_only',
+        true,
+      );
+      updateNavigationTag(
+        factoryResetNavigationTag,
+        'studio_nav_labs_only',
+        true,
+      );
+      return;
+    }
+
+    const serviceNavigation = firmwareUsesServiceNavigation(
+      connectedFirmwareName,
+    );
+    if (serviceNavigation) {
+      const fusionRequired = navigationCapabilities?.apps === false;
+      const serviceRequired = navigationCapabilities?.externalFlash === false;
+      updateNavigationTag(
+        appsNavigationTag,
+        'studio_nav_fusion_only',
+        !fusionRequired,
+      );
+      updateNavigationTag(
+        externalFlashNavigationTag,
+        'studio_nav_service_only',
+        !serviceRequired,
+      );
+      updateNavigationTag(
+        factoryResetNavigationTag,
+        'studio_nav_service_only',
+        !serviceRequired,
+      );
+      return;
+    }
+
+    const labsAppsRequired = navigationCapabilities?.apps === false;
+    const labsFlashRequired = navigationCapabilities?.externalFlash === false;
+    updateNavigationTag(
+      appsNavigationTag,
+      'studio_nav_labs_only',
+      !labsAppsRequired,
+    );
+    updateNavigationTag(
+      externalFlashNavigationTag,
+      'studio_nav_labs_only',
+      !labsFlashRequired,
+    );
+    updateNavigationTag(
+      factoryResetNavigationTag,
+      'studio_nav_labs_only',
+      !labsFlashRequired,
+    );
+  }
+
+  function applyFirmwareNavigationPolicy(deviceInfoName, connected) {
+    if (deviceInfoName !== undefined) {
+      connectedFirmwareName = String(deviceInfoName || '');
+      if (connected === undefined) firmwareNavigationConnected = true;
+    }
+    if (connected !== undefined) firmwareNavigationConnected = connected;
+    renderFirmwareNavigationTags();
+  }
+
+  function updateNavigationCapability(element, supported) {
+    if (!element) return;
+    element.dataset.capabilityKnown = String(typeof supported === 'boolean');
+    if (supported === false) {
+      element.dataset.capabilityDisabled = 'true';
+      element.setAttribute('data-i18n-title', 'studio_nav_unavailable_edition');
+      element.title = t('studio_nav_unavailable_edition');
+    } else {
+      delete element.dataset.capabilityDisabled;
+      element.removeAttribute('data-i18n-title');
+      element.removeAttribute('title');
+    }
+  }
+
+  function shouldKeepFirmwareNavigationProfile(context) {
+    const nextOwner = context?.nextOwner;
+    return (
+      (context?.reason === 'navigation' || context?.reason === 'handoff') &&
+      (nextOwner === 'tools' || nextOwner === 'viewer')
+    );
+  }
+
+  function shouldClearFirmwareNavigationOnSerialState(detail) {
+    if (detail?.state === 'reconnecting' && detail.owner === 'viewer')
+      return true;
+    return (
+      detail?.state === 'disconnected' &&
+      detail.previousOwner === 'viewer' &&
+      !shouldKeepFirmwareNavigationProfile(detail)
+    );
+  }
+
+  function clearFirmwareNavigationProfile() {
+    applyFirmwareNavigationPolicy('', false);
+    applyNavigationCapabilities(null);
+  }
+
+  function applyNavigationCapabilities(capabilities) {
+    let resolvedCapabilities = capabilities || null;
+    if (
+      resolvedCapabilities &&
+      !firmwareUsesServiceNavigation(connectedFirmwareName)
+    ) {
+      const labsFirmware =
+        resolvedCapabilities.apps === true &&
+        resolvedCapabilities.externalFlash === true;
+      resolvedCapabilities = {
+        ...resolvedCapabilities,
+        apps: labsFirmware,
+        externalFlash: labsFirmware,
+      };
+    }
+
+    navigationCapabilities = resolvedCapabilities;
+    updateNavigationCapability(appsNavigationItem, resolvedCapabilities?.apps);
+    updateNavigationCapability(
+      externalFlashNavigationItem,
+      resolvedCapabilities?.externalFlash,
+    );
+    updateNavigationCapability(
+      factoryResetNavigationItem,
+      resolvedCapabilities?.externalFlash,
+    );
+    renderFirmwareNavigationTags();
+    window.dispatchEvent(
+      new CustomEvent('uvstudio:navigationcapabilitieschange'),
+    );
+  }
+
+  async function detectNavigationCapabilities(deviceInfo) {
+    const session = toolsSerialSession;
+    let apps = false;
+    let externalFlash = false;
+
+    try {
+      await appInfo(APP_SLOT_FIRST, NAVIGATION_PROBE_TIMEOUT_MS);
+      apps = true;
+    } catch (error) {
+      if (
+        error?.code === 'UVSTUDIO_SERIAL_SESSION_CHANGED' ||
+        session !== toolsSerialSession ||
+        !port
+      )
+        throw error;
+    }
+
+    try {
+      await readExternalFlashChunk(
+        0,
+        1,
+        deviceInfo.timestamp,
+        NAVIGATION_PROBE_TIMEOUT_MS,
+        0,
+      );
+      externalFlash = true;
+    } catch (error) {
+      if (
+        error?.code === 'UVSTUDIO_SERIAL_SESSION_CHANGED' ||
+        session !== toolsSerialSession ||
+        !port
+      )
+        throw error;
+    }
+
+    if (session !== toolsSerialSession) {
+      throw Object.assign(new Error(t('tools_disconnected')), {
+        code: 'UVSTUDIO_SERIAL_SESSION_CHANGED',
+      });
+    }
+    applyNavigationCapabilities({ apps, externalFlash });
+  }
+
   // ========== UI UPDATE ==========
   function refreshLocalizedToolsState() {
+    applyFirmwareNavigationPolicy();
     if (labelFwFileEl) labelFwFileEl.textContent = t('labelFirmwareFile');
     if (labelCalibFileEl) labelCalibFileEl.textContent = t('labelCalibFile');
 
@@ -300,6 +523,7 @@
     updateInfoBox();
 
     if (flashBtn) flashBtn.textContent = t('flashBtn');
+    if (flashAssetsBtn) flashAssetsBtn.textContent = t('flashAssetsBtn');
     if (dumpBtn) dumpBtn.textContent = t('dumpBtn');
     if (restoreBtn) restoreBtn.textContent = t('restoreBtn');
     if (fileButton) fileButton.textContent = t('fileChoose');
@@ -439,14 +663,17 @@
 
   window.addEventListener('uvstudio:toolviewchange', (event) => {
     const nextView = event.detail?.view || 'flash';
-    const leavingSlots = activeToolsView === 'slots' && nextView !== 'slots';
     activeToolsView = nextView;
     updateInfoBox();
-    // Leaving Slots: stop its hardware auto-reconnect loop, but KEEP the port open
-    // so the next normal-mode view (Apps, Dump/Restore, Logo) inherits the live
-    // connection without a reconnect + port re-pick. Switching to a different owner
-    // (e.g. K5Viewer) still releases through the shared controller's releaseFor().
-    if (leavingSlots) stopSlotAutoReconnect();
+    if (
+      nextView === 'slots' &&
+      port &&
+      writer &&
+      toolsSerial.isOwner() &&
+      !activeOperationToken
+    ) {
+      void slotRefreshFlow();
+    }
   });
 
   // Initial i18n sync
@@ -500,6 +727,7 @@
     // The previous firmware is no longer current: make it unavailable so Flash is
     // disabled until the new selection has finished loading.
     firmwareData = null;
+    firmwareAssets = null;
     updateFlashButton();
     if (source === 'url' && firmwareFileInput) firmwareFileInput.value = '';
     window.dispatchEvent(
@@ -510,6 +738,7 @@
 
   function clearFirmware() {
     firmwareData = null;
+    firmwareAssets = null;
     if (fileName) {
       fileName.textContent = t('fileNoFile');
       fileName.classList.remove('has-file');
@@ -519,7 +748,19 @@
   }
 
   function setFirmwareBuffer(buf, name = 'firmware.bin') {
-    firmwareData = new Uint8Array(buf);
+    let parts;
+    try {
+      parts = window.UVStudioFirmwarePackage.splitFirmwarePackage(
+        new Uint8Array(buf),
+      );
+    } catch (e) {
+      log(t('fwPackageInvalid', name, e?.message ?? String(e)), 'error');
+      clearFirmware();
+      return;
+    }
+    firmwareData = parts.image;
+    firmwareAssets = parts.pack;
+    resetFlashSteps();
     firmwareFileName = name;
     hideChirpDriverOffer();
     if (fileName) {
@@ -528,6 +769,8 @@
     }
     if (fileLabel) fileLabel.classList.add('has-file');
     log(t('firmwareLoaded', name, firmwareData.length), 'success');
+    if (firmwareAssets)
+      log(t('fwAssetsDetected', firmwareAssets.length), 'info');
     updateFlashButton();
   }
 
@@ -662,8 +905,15 @@
     loadFirmwareFromURL,
     loadSlotFirmwareFromURL,
     loadAppFromURL,
+    installAppFromURL,
+    updateAppFromURL,
+    deleteAppSlot,
     clearAppFromCatalog: () => beginAppImageLoad('catalog'),
     hasFirmware: () => Boolean(firmwareData),
+    // App submission panel: the radio connected here, its screen and firmware.
+    radioConnected: () => Boolean(port && writer && toolsSerial.isOwner()),
+    captureScreen: captureRadioScreen,
+    radioFirmwareName: () => appCurrentFirmwareName,
   });
 
   function updateFlashButton() {
@@ -737,9 +987,53 @@
   }
 
   // ========== SERIAL CONNECTION ==========
-  async function connect() {
+  // Write the assets of the selected firmware package into the running slot:
+  // completes a flash whose serial link did not survive the reboot, or a
+  // multiboot slot restored without its assets.
+  if (flashAssetsBtn) {
+    flashAssetsBtn.addEventListener('click', async () => {
+      const assets = pendingFirmwareAssets;
+      if (!assets) return;
+      const operation = beginToolsOperation('flash-assets', true);
+      if (!operation) return;
+      try {
+        if (!port) await connect({ reuse: true, remember: true });
+        readBuffer = [];
+        await sleep(500);
+        const dev = await requestDeviceInfo();
+        if (progressContainer) progressContainer.style.display = 'block';
+        updateProgress(0);
+        setFlashStep('restart', 'done', 'flash_step_detected');
+        setFlashStep('assets', 'active');
+        await writeFirmwareAssets(
+          ASSET_RUNNING_SLOT,
+          assets,
+          dev.timestamp,
+          (fraction) => {
+            setFlashStepProgress('assets', fraction);
+            return updateProgress(fraction * 100);
+          },
+        );
+        updateProgress(100);
+        setFlashStep('assets', 'done', 'flash_step_done');
+        setFlashStepsComplete(true);
+        pendingFirmwareAssets = null;
+      } catch (e) {
+        failActiveFlashStep();
+        log(t('fwAssetsError', e?.message ?? String(e)), 'error');
+      } finally {
+        hideProgressSoon();
+        if (port) await disconnect();
+        endToolsOperation(operation);
+      }
+    });
+  }
+
+  async function connect(options = {}) {
+    let reusedPort = null;
     try {
-      stopSlotAutoReconnect({ forgetPort: true });
+      if (port && writer && toolsSerial.isOwner()) return;
+      stopToolsReconnect({ forgetPortInfo: true });
       await toolsSerial.acquire({ source: 'tools' });
       if (!toolsSerial.isOwner()) {
         throw Object.assign(new Error(t('tools_disconnected')), {
@@ -747,7 +1041,9 @@
         });
       }
       log(t('requestingPort'), 'info');
-      port = await navigator.serial.requestPort();
+      reusedPort =
+        options.reuse === false ? null : toolsSerial.getReusablePort();
+      port = reusedPort || (await navigator.serial.requestPort());
       if (!toolsSerial.isOwner()) {
         throw Object.assign(new Error(t('tools_disconnected')), {
           code: 'UVSTUDIO_SERIAL_RELEASED',
@@ -769,8 +1065,9 @@
       reader = port.readable.getReader();
       log(t('gettingWriter'), 'info');
       writer = port.writable.getWriter();
+      if (options.remember !== false) toolsSerial.rememberPort(port);
       toolsSerialSession++;
-      slotLastPortInfo = port.getInfo();
+      toolsLastPortInfo = options.remember === false ? null : port.getInfo();
 
       log(t('startingRead'), 'info');
       startReading();
@@ -783,9 +1080,33 @@
         });
       }
 
+      if (options.remember !== false) {
+        applyFirmwareNavigationPolicy('', false);
+        applyNavigationCapabilities(null);
+        readBuffer = [];
+        let deviceInfoDetected = false;
+        try {
+          const deviceInfo = await requestDeviceInfo({ timeoutMs: 1500 });
+          deviceInfoDetected = true;
+          await detectNavigationCapabilities(deviceInfo);
+        } catch (error) {
+          console.warn(
+            'Unable to detect the connected firmware capabilities:',
+            error,
+          );
+        }
+        if (!toolsSerial.isOwner()) {
+          throw Object.assign(new Error(t('tools_disconnected')), {
+            code: 'UVSTUDIO_SERIAL_RELEASED',
+          });
+        }
+        if (!deviceInfoDetected) applyFirmwareNavigationPolicy('', true);
+      }
+
       log(t('connected'), 'success');
       toolsSerial.setState('connected', { reason: 'connection-established' });
     } catch (e) {
+      if (reusedPort) toolsSerial.forgetPort(reusedPort);
       if (toolsSerial.isOwner()) {
         await toolsSerial.release('connection-error');
       } else {
@@ -800,11 +1121,12 @@
 
   async function disconnectPort(context = {}) {
     const hardwareDisconnect = context.reason === 'hardware-disconnect';
-    if (!hardwareDisconnect) stopSlotAutoReconnect({ forgetPort: true });
+    if (!hardwareDisconnect) stopToolsReconnect({ forgetPortInfo: true });
     isReading = false;
     const activeReader = reader;
     const activeWriter = writer;
     const activePort = port;
+    if (hardwareDisconnect && activePort) toolsSerial.forgetPort(activePort);
     reader = null;
     writer = null;
     port = null;
@@ -816,6 +1138,9 @@
       writer: activeWriter,
       port: activePort,
     });
+    if (!shouldKeepFirmwareNavigationProfile(context)) {
+      clearFirmwareNavigationProfile();
+    }
     if (context.reason === 'operation-complete' || context.reason === 'user') {
       log(t('tools_disconnected'), 'info');
     }
@@ -825,16 +1150,146 @@
     disconnect: disconnectPort,
   });
 
+  const toolsReconnect = window.UVStudioSerial.createReconnectManager({
+    canAttempt: () =>
+      toolsViewUsesRuntimeSerial() &&
+      toolsSerial.isOwner() &&
+      !activeOperationToken,
+    reconnect: reconnectToolsPort,
+    onError: (error) =>
+      console.warn(
+        'Unable to enumerate serial ports during tools reconnect:',
+        error,
+      ),
+    onStateChange: () => {
+      updateActionButtons();
+      runPendingToolsRefresh();
+    },
+  });
+
+  window.addEventListener('uvstudio:serialrequired', (event) => {
+    if (event.detail?.owner !== 'tools' || event.detail.promise) return;
+    event.detail.promise = connect({ reuse: true, remember: true });
+  });
+
+  window.addEventListener('uvstudio:serialstatechange', (event) => {
+    if (shouldClearFirmwareNavigationOnSerialState(event.detail)) {
+      clearFirmwareNavigationProfile();
+    }
+  });
+
+  window.addEventListener('uvstudio:firmwareprofiledetected', (event) => {
+    const detail = event.detail;
+    const snapshot = window.UVStudioSerial?.getSnapshot();
+    if (
+      !detail?.name ||
+      !detail.capabilities ||
+      snapshot?.owner !== 'viewer' ||
+      snapshot.state !== 'connected'
+    )
+      return;
+    applyFirmwareNavigationPolicy(detail.name, true);
+    applyNavigationCapabilities(detail.capabilities);
+  });
+
+  // Steps shown under the Flash button for a firmware that carries assets:
+  // image, radio restart, assets. Each step is pending, active, done or error,
+  // has its own gauge (the global one stays for binary-only firmwares) and a
+  // note whose i18n key is kept, so a language change redraws it.
+  const FLASH_STEPS = ['image', 'restart', 'assets'];
+
+  function flashStepElement(step) {
+    return flashSteps?.querySelector(`[data-step="${step}"]`) || null;
+  }
+
+  function setFlashStep(step, state, noteKey = null) {
+    const element = flashStepElement(step);
+    if (!element) return;
+    if (state) element.dataset.state = state;
+    else delete element.dataset.state;
+    delete element.dataset.wait;
+
+    const key = noteKey || `flash_step_${step}_hint`;
+    const note = element.querySelector('.flash-step-note');
+    if (note) {
+      note.setAttribute('data-i18n', key);
+      note.textContent = t(key);
+    }
+    const mark = element.querySelector('.flash-step-mark');
+    if (mark)
+      mark.textContent =
+        state === 'done'
+          ? '\u2713'
+          : state === 'error'
+            ? '!'
+            : String(FLASH_STEPS.indexOf(step) + 1);
+    const fill = element.querySelector('.flash-step-fill');
+    if (fill && state === 'error' && !fill.style.width)
+      fill.style.width = '100%';
+    if (fill && (state === 'done' || !state)) fill.style.width = '';
+    const pct = element.querySelector('.flash-step-pct');
+    if (pct && state !== 'active') pct.textContent = '';
+  }
+
+  // Waiting for the radio: active, with moving stripes instead of a percentage.
+  function setFlashStepWaiting(step) {
+    setFlashStep(step, 'active', 'flash_step_waiting');
+    const element = flashStepElement(step);
+    if (element) element.dataset.wait = 'true';
+  }
+
+  // Returns true when the shown percentage changed (to let the browser paint).
+  function setFlashStepProgress(step, fraction) {
+    const element = flashStepElement(step);
+    if (!element) return false;
+    const label = `${Math.round(Math.min(1, Math.max(0, fraction)) * 100)}%`;
+    const pct = element.querySelector('.flash-step-pct');
+    const fill = element.querySelector('.flash-step-fill');
+    const changed = Boolean(pct && pct.textContent !== label);
+    if (pct) pct.textContent = label;
+    if (fill) fill.style.width = label;
+    return changed;
+  }
+
+  function failActiveFlashStep() {
+    FLASH_STEPS.forEach((step) => {
+      if (flashStepElement(step)?.dataset.state === 'active')
+        setFlashStep(step, 'error', 'flash_step_failed');
+    });
+  }
+
+  // Once the assets are written, the cable reminder becomes "you can unplug".
+  function setFlashStepsComplete(complete) {
+    if (!flashSteps) return;
+    flashSteps.dataset.complete = String(complete);
+    const hint = flashSteps.querySelector('#flashStepsHint');
+    if (!hint) return;
+    const key = complete ? 'flash_unplug_done' : 'flash_unplug_warning';
+    hint.setAttribute('data-i18n', key);
+    hint.textContent = t(key);
+  }
+
+  function resetFlashSteps() {
+    FLASH_STEPS.forEach((step) => setFlashStep(step, null));
+    setFlashStepsComplete(false);
+  }
+
   function updateActionButtons() {
     const busy =
       Boolean(activeOperationToken) ||
-      slotAutoReconnecting ||
-      slotReconnectInProgress ||
+      toolsReconnect.isActive() ||
+      toolsReconnect.isAttempting() ||
       slotUpdateDownloadPending;
     const slotNameValid = Boolean(
       slotNormalizeName(slotNameInput?.value ?? slotMeta.name),
     );
     if (flashBtn) flashBtn.disabled = !serialSupported || busy || !firmwareData;
+    if (flashSteps) flashSteps.hidden = !firmwareAssets;
+    if (flashAssetsBtn) {
+      flashAssetsBtn.hidden = !pendingFirmwareAssets;
+      flashAssetsBtn.disabled =
+        !serialSupported || busy || !pendingFirmwareAssets;
+    }
     if (dumpBtn) dumpBtn.disabled = !serialSupported || busy;
     if (restoreBtn)
       restoreBtn.disabled = !serialSupported || busy || !calibData;
@@ -878,7 +1333,7 @@
     activeOperationToken = null;
     activeOperationName = null;
     updateActionButtons();
-    runPendingSlotRefresh();
+    runPendingToolsRefresh();
   }
 
   window.addEventListener('beforeunload', (event) => {
@@ -913,6 +1368,7 @@
         }
         if (value?.length) {
           readBuffer.push(...value);
+          trackScreenBytes(value);
           const isBulkFlashTransfer =
             activeOperationName === 'dump-flash' ||
             activeOperationName === 'restore-flash' ||
@@ -933,67 +1389,139 @@
     if (unexpectedlyClosed) void handleToolsHardwareDisconnect();
   }
 
-  // ========== FIRMWARE SLOTS AUTO-RECONNECT ==========
-  function sameSlotPort(candidate) {
-    if (!candidate || !slotLastPortInfo) return false;
-    const info = candidate.getInfo();
-    return (
-      info.usbVendorId === slotLastPortInfo.usbVendorId &&
-      info.usbProductId === slotLastPortInfo.usbProductId
-    );
+  // ========== RADIO SCREEN CAPTURE ==========
+  // The radio's screen over the tools connection, for the app submission panel
+  // (app-submit.js): no detour through the Live Viewer. Its keepalive ping
+  // makes the radio stream K5Viewer frames on the same port, [0xFn] AA 55 02
+  // <length BE> then 9-byte chunks [index, 8 row-major bytes], then 0A. The
+  // first frame after a ping pause holds all 128 chunks. Once a capture asked
+  // for it, every frame of the session is applied here too: a radio still
+  // streaming from an earlier ping sends only what changes, and those diffs
+  // keep this copy right.
+  const K5VIEWER_PING = Uint8Array.of(0x55, 0xaa, 0x00, 0x00);
+  const K5VIEWER_FULL_FRAME = 128 * 9;
+  let screenTrack = null;
+
+  function trackScreenBytes(value) {
+    const track = screenTrack;
+    if (!track || track.session !== toolsSerialSession) return;
+    const bytes = track.bytes;
+    bytes.push(...value);
+    let i = 0;
+    while (i + 5 <= bytes.length) {
+      const size = (bytes[i + 3] << 8) | bytes[i + 4];
+      if (
+        bytes[i] !== 0xaa ||
+        bytes[i + 1] !== 0x55 ||
+        bytes[i + 2] !== 0x02 ||
+        size % 9 !== 0 ||
+        size > K5VIEWER_FULL_FRAME
+      ) {
+        i++;
+        continue;
+      }
+      if (bytes.length < i + 6 + size) break;
+      let valid = bytes[i + 5 + size] === 0x0a;
+      for (let at = i + 5; valid && at < i + 5 + size; at += 9)
+        valid = bytes[at] < 128;
+      if (!valid) {
+        i++;
+        continue;
+      }
+      for (let at = i + 5; at < i + 5 + size; at += 9) {
+        track.rows.set(bytes.slice(at + 1, at + 9), bytes[at] * 8);
+        track.known[bytes[at]] = 1;
+      }
+      if (size === K5VIEWER_FULL_FRAME) track.full = true;
+      i += 6 + size;
+    }
+    bytes.splice(0, i);
   }
 
-  function stopSlotAutoReconnect(options = {}) {
-    slotAutoReconnecting = false;
-    clearTimeout(slotReconnectTimer);
-    slotReconnectTimer = null;
-    slotRefreshPending = false;
-    if (options.forgetPort) slotLastPortInfo = null;
-    updateActionButtons();
+  // Row-major bits (pixel x, y = bit (y * 128 + x)) to the catalog LCD layout:
+  // 8 pages of 128 column bytes, bit 0 on top.
+  function screenPagesFromRows(rows) {
+    const pages = new Uint8Array(1024);
+    for (let y = 0; y < 64; y++) {
+      for (let x = 0; x < 128; x++) {
+        const bit = y * 128 + x;
+        if ((rows[bit >> 3] >> (bit & 7)) & 1)
+          pages[(y >> 3) * 128 + x] |= 1 << (y & 7);
+      }
+    }
+    return pages;
   }
 
-  async function handleSlotHardwareDisconnect() {
-    if (slotHardwareDisconnectPromise) return slotHardwareDisconnectPromise;
-    if (
-      activeToolsView !== 'slots' ||
-      !port ||
-      !toolsSerial.isOwner() ||
-      !slotLastPortInfo
-    )
-      return;
-
-    slotHardwareDisconnectPromise = (async () => {
-      await disconnectPort({ reason: 'hardware-disconnect' });
-      if (activeToolsView !== 'slots' || !toolsSerial.isOwner()) return;
-
-      slotAutoReconnecting = true;
-      toolsSerial.setState('reconnecting', { reason: 'hardware-disconnect' });
-      log(t('serial_disconnected_auto'), 'info');
-      updateActionButtons();
-      scheduleSlotReconnectProbe();
-    })();
-
+  // { frame } or { error: 'offline' | 'busy' | 'timeout' }.
+  async function captureRadioScreen(timeoutMs = 3000) {
+    if (!port || !writer || !toolsSerial.isOwner()) return { error: 'offline' };
+    const token = beginToolsOperation('capture-screen', false);
+    if (!token) return { error: 'busy' };
+    const session = toolsSerialSession;
+    if (!screenTrack || screenTrack.session !== session) {
+      screenTrack = {
+        session,
+        rows: new Uint8Array(1024),
+        known: new Uint8Array(128),
+        bytes: [],
+        full: false,
+      };
+    }
+    const track = screenTrack;
+    track.full = false;
+    const start = performance.now();
     try {
-      await slotHardwareDisconnectPromise;
+      for (;;) {
+        if (session !== toolsSerialSession) return { error: 'offline' };
+        await writer.write(K5VIEWER_PING);
+        await sleep(200);
+        // A radio that was not streaming answers with a full frame at once. One
+        // still streaming sends nothing for an unchanged screen: the copy is
+        // then current, provided it was complete.
+        const elapsed = performance.now() - start;
+        if (track.full || (elapsed >= 600 && track.known.every(Boolean))) {
+          return { frame: screenPagesFromRows(track.rows) };
+        }
+        if (elapsed >= timeoutMs) return { error: 'timeout' };
+      }
+    } catch (error) {
+      if (error?.code === 'UVSTUDIO_SERIAL_SESSION_CHANGED' || !port)
+        return { error: 'offline' };
+      throw error;
     } finally {
-      slotHardwareDisconnectPromise = null;
+      endToolsOperation(token);
     }
   }
 
-  // Outside Firmware Slots (e.g. the port inherited from Slots or Apps), a lost
-  // device must not leave a dead `port` behind: the next action would reuse it
-  // instead of reconnecting, typically when the radio is switched to DFU mode
-  // before flashing. Release it so the next action starts a fresh connection.
-  // A running operation is left alone: it fails and releases the port itself.
-  let toolsHardwareDisconnectPromise = null;
+  // ========== RUNTIME TOOLS AUTO-RECONNECT ==========
+  function toolsViewUsesRuntimeSerial(view = activeToolsView) {
+    return view !== 'flash';
+  }
+
+  function stopToolsReconnect(options = {}) {
+    toolsReconnect.stop({ forgetPortInfo: options.forgetPortInfo });
+    toolsRefreshPending = false;
+    if (options.forgetPortInfo) toolsLastPortInfo = null;
+  }
+
   async function handleToolsHardwareDisconnect() {
-    if (activeToolsView === 'slots') return handleSlotHardwareDisconnect();
     if (toolsHardwareDisconnectPromise) return toolsHardwareDisconnectPromise;
-    if (!port || !toolsSerial.isOwner() || activeOperationToken) return;
+    if (!port || !toolsSerial.isOwner()) return;
 
     toolsHardwareDisconnectPromise = (async () => {
-      await toolsSerial.release('hardware-disconnect');
-      log(t('tools_disconnected'), 'info');
+      if (!toolsViewUsesRuntimeSerial() || !toolsLastPortInfo) {
+        await toolsSerial.release('hardware-disconnect');
+        log(t('tools_disconnected'), 'info');
+        return;
+      }
+
+      toolsRefreshPending = false;
+      await disconnectPort({ reason: 'hardware-disconnect' });
+      if (!toolsViewUsesRuntimeSerial() || !toolsSerial.isOwner()) return;
+
+      toolsSerial.setState('reconnecting', { reason: 'hardware-disconnect' });
+      log(t('serial_disconnected_auto'), 'info');
+      toolsReconnect.start(toolsLastPortInfo);
     })();
     try {
       await toolsHardwareDisconnectPromise;
@@ -1002,59 +1530,17 @@
     }
   }
 
-  function scheduleSlotReconnectProbe() {
-    if (slotReconnectTimer || !slotAutoReconnecting) return;
-    slotReconnectTimer = setTimeout(async () => {
-      slotReconnectTimer = null;
-      if (!slotAutoReconnecting || !slotLastPortInfo) return;
-
-      try {
-        const ports = await navigator.serial.getPorts();
-        for (const candidate of ports.filter(sameSlotPort)) {
-          await reconnectSlotPort(candidate);
-          if (!slotAutoReconnecting) break;
-        }
-      } catch (error) {
-        console.warn(
-          'Unable to enumerate serial ports during slot reconnect:',
-          error,
-        );
-      }
-      if (slotAutoReconnecting) scheduleSlotReconnectProbe();
-    }, 500);
-  }
-
-  async function reconnectSlotPort(candidate) {
-    if (
-      !slotAutoReconnecting ||
-      slotReconnectInProgress ||
-      !sameSlotPort(candidate)
-    )
-      return;
-    slotReconnectInProgress = true;
-    updateActionButtons();
-
-    await sleep(500);
-    if (
-      !slotAutoReconnecting ||
-      activeToolsView !== 'slots' ||
-      !toolsSerial.isOwner()
-    ) {
-      slotReconnectInProgress = false;
-      updateActionButtons();
-      return;
-    }
-
+  async function reconnectToolsPort(candidate) {
     try {
       port = candidate;
       await port.open({ baudRate: BAUDRATE, bufferSize: 65536 });
       if (
-        !slotAutoReconnecting ||
-        activeToolsView !== 'slots' ||
+        !toolsReconnect.isActive() ||
+        !toolsViewUsesRuntimeSerial() ||
         !toolsSerial.isOwner()
       ) {
         await disconnectPort({ reason: 'hardware-disconnect' });
-        return;
+        return false;
       }
 
       reader = port.readable.getReader();
@@ -1062,42 +1548,58 @@
       toolsSerialSession++;
       startReading();
 
-      slotAutoReconnecting = false;
-      clearTimeout(slotReconnectTimer);
-      slotReconnectTimer = null;
+      let deviceInfoDetected = false;
+      try {
+        readBuffer = [];
+        const deviceInfo = await requestDeviceInfo({ timeoutMs: 1500 });
+        deviceInfoDetected = true;
+        await detectNavigationCapabilities(deviceInfo);
+      } catch (error) {
+        if (!port || !toolsSerial.isOwner()) throw error;
+        console.warn(
+          'Unable to refresh firmware capabilities after reconnect:',
+          error,
+        );
+      }
+      if (!deviceInfoDetected) applyFirmwareNavigationPolicy('', true);
+
+      toolsSerial.rememberPort(port);
       toolsSerial.setState('connected', { reason: 'auto-reconnect' });
       log(t('serial_reconnected'), 'success');
-      slotRefreshPending = true;
+      toolsRefreshPending =
+        activeToolsView === 'slots' || activeToolsView === 'apps';
+      return true;
     } catch (error) {
-      console.warn('Firmware Slots auto-reconnect failed:', error);
+      console.warn('Runtime tools auto-reconnect failed:', error);
       await disconnectPort({ reason: 'hardware-disconnect' });
+      return false;
     } finally {
-      slotReconnectInProgress = false;
       updateActionButtons();
-      runPendingSlotRefresh();
     }
   }
 
-  function runPendingSlotRefresh() {
+  function runPendingToolsRefresh() {
     if (
-      !slotRefreshPending ||
+      !toolsRefreshPending ||
       activeOperationToken ||
-      activeToolsView !== 'slots' ||
+      toolsReconnect.isActive() ||
       !port ||
       !writer ||
       !toolsSerial.isOwner()
     )
       return;
-    slotRefreshPending = false;
-    void slotRefreshFlow();
+    const view = activeToolsView;
+    toolsRefreshPending = false;
+    if (view === 'slots') {
+      void slotRefreshFlow();
+    } else if (view === 'apps' && navigationCapabilities?.apps === true) {
+      void appRefreshFlow();
+    }
   }
 
   if (serialSupported) {
     navigator.serial.addEventListener('disconnect', (event) => {
       if (port && event.target === port) void handleToolsHardwareDisconnect();
-    });
-    navigator.serial.addEventListener('connect', (event) => {
-      void reconnectSlotPort(event.target);
     });
   }
 
@@ -1225,12 +1727,29 @@
     if (!firmwareData) return;
     // Snapshot the buffer so a download finishing mid-flash cannot swap it out.
     const fw = firmwareData;
+    const assets = firmwareAssets;
     const operation = beginToolsOperation('flash-firmware', true);
     if (!operation) return;
     try {
-      if (!port) await connect();
-      await flashFirmware(fw);
+      if (!port) await connect({ reuse: false, remember: false });
+      pendingFirmwareAssets = null;
+      resetFlashSteps();
+      if (assets) setFlashStep('image', 'active');
+      // With assets, the steps carry the progress instead of the global gauge.
+      await flashFirmware(
+        fw,
+        assets
+          ? {
+              onProgress: (fraction) => setFlashStepProgress('image', fraction),
+            }
+          : {},
+      );
+      if (assets) {
+        setFlashStep('image', 'done', 'flash_step_done');
+        await installAssetsAfterFlash(assets);
+      }
     } catch (e) {
+      failActiveFlashStep();
       log(t('flashError', e?.message ?? String(e)), 'error');
     } finally {
       if (port) await disconnect();
@@ -1240,8 +1759,13 @@
 
   async function flashFirmware(fw, options = {}) {
     hideChirpDriverOffer();
-    if (progressContainer) progressContainer.style.display = 'block';
-    updateProgress(0);
+    // options.onProgress(fraction) replaces the global gauge: a firmware with
+    // assets shows its progress in the flash steps, and is not done yet here.
+    const report = options.onProgress || null;
+    if (!report) {
+      if (progressContainer) progressContainer.style.display = 'block';
+      updateProgress(0);
+    }
 
     readBuffer = [];
     log(t('bufferEmpty'), 'info');
@@ -1275,10 +1799,14 @@
     await performHandshake(devInfo.blVersion);
     log(t('handshakeComplete'), 'success');
 
-    await programFirmware(fw);
+    await programFirmware(
+      fw,
+      report || ((fraction) => updateProgress(fraction * 100)),
+    );
 
-    updateProgress(100);
-    log(t('programmingComplete'), 'success');
+    if (report) report(1);
+    else updateProgress(100);
+    log(t(report ? 'fwAssetsImageDone' : 'programmingComplete'), 'success');
 
     // Global community counter: a firmware was successfully flashed.
     // Best-effort — never blocks or fails the flash.
@@ -1292,6 +1820,10 @@
     if (options.offerChirpDriver !== false)
       maybeOfferChirpDriver(firmwareFileName);
 
+    if (!report) hideProgressSoon();
+  }
+
+  function hideProgressSoon() {
     setTimeout(() => {
       if (progressContainer) progressContainer.style.display = 'none';
       updateProgress(0);
@@ -1380,7 +1912,7 @@
     log(t('bufferCleaned', readBuffer.length), 'info');
   }
 
-  async function programFirmware(fw) {
+  async function programFirmware(fw, report) {
     const pageCount = Math.ceil(fw.length / 256);
     const timestamp = Date.now() & 0xffffffff;
     log(t('programming', pageCount), 'info');
@@ -1390,7 +1922,7 @@
     const MAX_RETRIES = 3;
 
     while (pageIndex < pageCount) {
-      updateProgress((pageIndex / pageCount) * 100);
+      report(pageIndex / pageCount);
 
       const msg = createMessage(MSG_PROG_FW, 268);
       const view = new DataView(msg.buffer);
@@ -1522,7 +2054,6 @@
     } catch (e) {
       log(t('error', e?.message ?? String(e)), 'error');
     } finally {
-      if (port) await disconnect();
       endToolsOperation(operation);
     }
   });
@@ -1597,7 +2128,13 @@
     return null;
   }
 
-  async function readExternalFlashChunk(address, length, timestamp) {
+  async function readExternalFlashChunk(
+    address,
+    length,
+    timestamp,
+    timeoutMs = FLASH_COMMAND_TIMEOUT_MS,
+    retries = FLASH_COMMAND_RETRIES,
+  ) {
     const msg = createMessage(MSG_READ_FLASH, 10);
     const view = new DataView(msg.buffer);
     view.setUint32(4, address, true);
@@ -1608,7 +2145,8 @@
       msg,
       MSG_READ_FLASH_RESP,
       address,
-      FLASH_COMMAND_TIMEOUT_MS,
+      timeoutMs,
+      retries,
     );
     if (!resp || resp.data.length < 7) {
       throw new Error(t('flashReadError', flashAddress(address)));
@@ -1774,17 +2312,16 @@
     }
   }
 
-  // Labs-only gate for External Flash and Factory reset: a firmware without
-  // external-flash access never answers 0x0738. Returns false after logging and
-  // showing the Labs modal, so the caller simply stops.
-  async function hasExternalFlashSupport(timestamp, featureKey) {
+  // Safety gate for External Flash and Factory reset: a firmware without
+  // external-flash access never answers 0x0738. The navigation already explains
+  // the incompatibility inline; this guard only prevents an unsupported command.
+  async function hasExternalFlashSupport(timestamp) {
     try {
       await readExternalFlashChunk(0, 1, timestamp);
       return true;
     } catch (e) {
       if (e?.code === 'UVSTUDIO_SERIAL_SESSION_CHANGED' || !port) throw e;
       log(t('flashUnsupported'), 'error');
-      showLabsRequiredModal(featureKey);
       return false;
     }
   }
@@ -1957,6 +2494,67 @@
     });
   }
 
+  // Firmware Slots refusing a v7.0+ firmware (one with assets) while the radio
+  // runs an older one: said in a dialog, in terms of versions, with a way to
+  // Flash Firmware.
+  let slotAssetsFocusOrigin = null;
+
+  function closeSlotAssetsModal() {
+    if (!slotAssetsModal?.classList.contains('show')) return;
+    const focusTarget = slotAssetsFocusOrigin;
+    slotAssetsFocusOrigin = null;
+    slotAssetsModal.classList.remove('show');
+    slotAssetsModal.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+    if (focusTarget && document.contains(focusTarget)) {
+      focusTarget.focus({ preventScroll: true });
+    }
+  }
+
+  function slotNeedsV7Text(runningName) {
+    const version = String(runningName || '').match(
+      /\bv?(\d+(?:\.\d+){1,2})\b/i,
+    )?.[1];
+    return (
+      (version ? t('slotNeedsV7Running', version) + ' ' : '') + t('slotNeedsV7')
+    );
+  }
+
+  function showSlotAssetsModal(text) {
+    if (!slotAssetsModal) return;
+    const body = document.getElementById('slotAssetsBody');
+    if (body) body.textContent = text;
+    slotAssetsFocusOrigin = document.activeElement;
+    slotAssetsModal.classList.add('show');
+    slotAssetsModal.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+    requestAnimationFrame(() =>
+      document.getElementById('slotAssetsFlashBtn')?.focus(),
+    );
+  }
+
+  if (slotAssetsModal) {
+    document
+      .getElementById('slotAssetsClose')
+      ?.addEventListener('click', closeSlotAssetsModal);
+    document
+      .getElementById('slotAssetsCloseBtn')
+      ?.addEventListener('click', closeSlotAssetsModal);
+    document
+      .getElementById('slotAssetsFlashBtn')
+      ?.addEventListener('click', () => {
+        slotAssetsFocusOrigin = null;
+        closeSlotAssetsModal();
+        document.querySelector('.nav-item[data-route="flash"]')?.click();
+      });
+    slotAssetsModal.addEventListener('click', (event) => {
+      if (event.target === slotAssetsModal) closeSlotAssetsModal();
+    });
+    slotAssetsModal.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') closeSlotAssetsModal();
+    });
+  }
+
   let factoryResetModalResolve = null;
   let factoryResetModalFocusOrigin = null;
   let factoryResetModalStep = 'confirm';
@@ -2063,13 +2661,7 @@
       readBuffer = [];
       await sleep(1000);
       const devInfo = await requestDeviceInfo();
-      if (
-        !(await hasExternalFlashSupport(
-          devInfo.timestamp,
-          'studio_nav_factory_reset',
-        ))
-      )
-        return;
+      if (!(await hasExternalFlashSupport(devInfo.timestamp))) return;
       if (!(await showFactoryResetModal('confirm', target))) return;
 
       progressContainer.style.display = 'block';
@@ -2105,7 +2697,7 @@
 
       updateProgress(0);
       log(t('factoryResetWaitingDfu', target.label), 'info');
-      await connect();
+      await connect({ reuse: false, remember: false });
       await flashFirmware(stockFirmware, {
         count: false,
         offerChirpDriver: false,
@@ -2139,13 +2731,7 @@
         await sleep(1000);
 
         const devInfo = await requestDeviceInfo();
-        if (
-          !(await hasExternalFlashSupport(
-            devInfo.timestamp,
-            'studio_nav_external_flash',
-          ))
-        )
-          return;
+        if (!(await hasExternalFlashSupport(devInfo.timestamp))) return;
         progressContainer.style.display = 'block';
         updateProgress(0);
         log(t('dumpingFlash'), 'info');
@@ -2182,7 +2768,6 @@
       } catch (e) {
         log(t('error', e?.message ?? String(e)), 'error');
       } finally {
-        if (port) await disconnect();
         endToolsOperation(operation);
       }
     });
@@ -2201,13 +2786,7 @@
         await sleep(1000);
 
         const devInfo = await requestDeviceInfo();
-        if (
-          !(await hasExternalFlashSupport(
-            devInfo.timestamp,
-            'studio_nav_external_flash',
-          ))
-        )
-          return;
+        if (!(await hasExternalFlashSupport(devInfo.timestamp))) return;
         // Destructive: rewriting the external flash replaces the logo, settings,
         // firmware slots and multiboot state. Device-specific calibration is skipped.
         // Asked only once the firmware is known to support the restore.
@@ -2283,7 +2862,6 @@
       } catch (e) {
         log(t('error', e?.message ?? String(e)), 'error');
       } finally {
-        if (port) await disconnect();
         endToolsOperation(operation);
       }
     });
@@ -2361,33 +2939,35 @@
     } catch (e) {
       log(t('error', e?.message ?? String(e)), 'error');
     } finally {
-      if (port) await disconnect();
       endToolsOperation(operation);
     }
   });
 
   // ========== REQUEST DEVICE INFO (for dump/restore) ==========
-  async function requestDeviceInfo() {
-    log(t('establishing'), 'info');
+  async function requestDeviceInfo(options = {}) {
+    if (!options.quiet) log(t('establishing'), 'info');
 
     const ts = Date.now() & 0xffffffff;
     const msg = createMessage(MSG_DEV_INFO_REQ, 4);
     new DataView(msg.buffer).setUint32(4, ts, true);
     await sendMessage(msg);
 
-    for (let timeout = 0; timeout < 500; timeout++) {
+    const attempts = Math.max(1, Math.ceil((options.timeoutMs || 5000) / 10));
+    for (let timeout = 0; timeout < attempts; timeout++) {
       await sleep(10);
       const resp = fetchMessage(readBuffer);
       if (!resp) continue;
 
-      log(
-        t('messageReceived', resp.msgType.toString(16).padStart(4, '0')),
-        'info',
-      );
+      if (!options.quiet)
+        log(
+          t('messageReceived', resp.msgType.toString(16).padStart(4, '0')),
+          'info',
+        );
 
       if (resp.msgType === MSG_DEV_INFO_RESP) {
         // Log raw device info data (and keep the firmware string to name it later)
         const name = logDeviceInfo(resp.data);
+        applyFirmwareNavigationPolicy(name);
         log(t('deviceDetected'), 'success');
         return { timestamp: ts, name };
       }
@@ -2647,7 +3227,6 @@
       } catch (e) {
         log(t('error', e?.message ?? String(e)), 'error');
       } finally {
-        if (port) await disconnect();
         endToolsOperation(operation);
       }
     });
@@ -2751,7 +3330,6 @@
       } catch (e) {
         log(t('error', e?.message ?? String(e)), 'error');
       } finally {
-        if (port) await disconnect();
         endToolsOperation(operation);
       }
     });
@@ -2890,7 +3468,6 @@
           if (progressContainer) progressContainer.style.display = 'none';
           updateProgress(0);
         }
-        if (port) await disconnect();
         endToolsOperation(operation);
       }
     });
@@ -2970,6 +3547,9 @@
     'slotStateSpi',
     'slotStateBadSlot',
     'slotStateAuth',
+    'slotStateError',
+    'slotStateError',
+    'slotStateMismatch',
   ];
   function slotStatusText(code) {
     return t(SLOT_STATUS_KEY[code] || 'slotStateError');
@@ -3192,6 +3772,248 @@
     return { crc: dv.getUint32(0, true) >>> 0, status: data[5] };
   }
 
+  // ---------- Firmware assets (fonts, menu texts) ----------
+  // v7 firmwares keep their read-only data in a 16 KiB asset zone per firmware
+  // slot (0x075x commands, same wire layout as the 0x072x slot family). The
+  // release package carries the pack after the image (firmware-package.js).
+  const MSG_ASSET_INFO = 0x0750,
+    MSG_ASSET_INFO_RESP = 0x0751;
+  const MSG_ASSET_ERASE = 0x0752,
+    MSG_ASSET_ERASE_RESP = 0x0753;
+  const MSG_ASSET_WRITE = 0x0754,
+    MSG_ASSET_WRITE_RESP = 0x0755;
+  const MSG_ASSET_VALIDATE = 0x0756,
+    MSG_ASSET_VALIDATE_RESP = 0x0757;
+  const ASSET_RUNNING_SLOT = 0xff; // the firmware resolves it to its own slot
+  const ASSET_BOOT_TIMEOUT_MS = 30000; // first boot also backs up the new firmware
+
+  async function assetInfo(slot, timeoutMs = 3000) {
+    const data = await slotCommand(
+      MSG_ASSET_INFO,
+      Uint8Array.of(slot),
+      MSG_ASSET_INFO_RESP,
+      timeoutMs,
+    );
+    const fwPackage = window.UVStudioFirmwarePackage;
+    return {
+      slot: data[0],
+      status: data[1],
+      runningSlot: data[2],
+      loaded: data[3] === 1,
+      runningBuildId: fwPackage.toHex(
+        data.subarray(36, 36 + fwPackage.BUILD_ID_SIZE),
+      ),
+    };
+  }
+
+  async function assetErase(slot, ts) {
+    const d = new Uint8Array(6);
+    d[0] = slot;
+    new DataView(d.buffer).setUint32(2, ts, true);
+    const data = await slotCommand(
+      MSG_ASSET_ERASE,
+      d,
+      MSG_ASSET_ERASE_RESP,
+      30000,
+    );
+    return data[1];
+  }
+
+  async function assetWriteChunk(slot, offset, ts, chunk) {
+    const d = new Uint8Array(12 + chunk.length);
+    const dv = new DataView(d.buffer);
+    d[0] = slot;
+    dv.setUint32(2, offset, true);
+    dv.setUint16(6, chunk.length, true);
+    dv.setUint32(8, ts, true);
+    d.set(chunk, 12);
+    const data = await slotCommand(
+      MSG_ASSET_WRITE,
+      d,
+      MSG_ASSET_WRITE_RESP,
+      1500,
+    );
+    return data[1];
+  }
+
+  // Same idempotent retry as slot chunks: NOR programming of identical bytes.
+  async function assetWriteChunkRetry(slot, offset, ts, chunk) {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await assetWriteChunk(slot, offset, ts, chunk);
+      } catch (e) {
+        if (attempt >= 4) throw e;
+        log(t('slotRetry', offset), 'info');
+        await sleep(60);
+      }
+    }
+  }
+
+  async function assetValidate(slot) {
+    const data = await slotCommand(
+      MSG_ASSET_VALIDATE,
+      Uint8Array.of(slot),
+      MSG_ASSET_VALIDATE_RESP,
+      5000,
+    );
+    return data[1];
+  }
+
+  // Write an asset pack into the zone of `slot` (ASSET_RUNNING_SLOT = the running
+  // firmware). The payload goes first and the header last, so an interrupted
+  // upload never validates. The running firmware only accepts its own build.
+  async function writeFirmwareAssets(slot, pack, ts, onProgress = null) {
+    const fwPackage = window.UVStudioFirmwarePackage;
+    const info = await assetInfo(slot);
+    if (
+      info.slot === info.runningSlot &&
+      info.runningBuildId !== fwPackage.parseAssetPack(pack).buildId
+    ) {
+      throw new Error(t('fwAssetsWrongFirmware'));
+    }
+
+    log(t('fwAssetsWriting'), 'info');
+    let st = await assetErase(info.slot, ts);
+    if (st !== 0) throw new Error('erase: ' + slotStatusText(st));
+    const header = fwPackage.PACK_HEADER_SIZE;
+    for (let off = header; off < pack.length; off += SLOT_WRITE_CHUNK) {
+      const chunk = pack.subarray(
+        off,
+        Math.min(off + SLOT_WRITE_CHUNK, pack.length),
+      );
+      st = await assetWriteChunkRetry(info.slot, off, ts, chunk);
+      if (st !== 0)
+        throw new Error('write @' + off + ': ' + slotStatusText(st));
+      if (onProgress && onProgress((off + chunk.length) / pack.length))
+        await waitForProgressPaint();
+    }
+    st = await assetWriteChunkRetry(info.slot, 0, ts, pack.subarray(0, header));
+    if (st !== 0) throw new Error('header: ' + slotStatusText(st));
+    st = await assetValidate(info.slot);
+    if (st !== 0) throw new Error('verify: ' + slotStatusText(st));
+    log(t('fwAssetsWriteOk'), 'success');
+  }
+
+  // After a bootloader flash, wait for the radio to run the new firmware and
+  // write its assets on its serial port, without any click: the same port when
+  // it survives the reboot (programming cable), else the port that appears once
+  // the radio restarts (USB-C: the firmware enumerates its own CDC device, which
+  // the page reaches through the ports already granted to it). The firmware
+  // keeps the screen blank until then. On timeout the "Install firmware assets"
+  // button finishes the job.
+  const FW_VCP_INFO = Object.freeze({
+    usbVendorId: 0x36b7,
+    usbProductId: 0xffff,
+  }); // App/usb/usbd_cdc_if.c
+  const ASSET_RADIO_TIMEOUT_MS = 120000;
+
+  async function openRadioPortForAssets(flashPortInfo) {
+    const matches = window.UVStudioSerial.portMatchesInfo;
+    let ports;
+    try {
+      ports = await navigator.serial.getPorts();
+    } catch (e) {
+      return false;
+    }
+    const candidates = ports.filter(
+      (candidate) =>
+        !candidate.readable &&
+        (matches(candidate, FW_VCP_INFO) || matches(candidate, flashPortInfo)),
+    );
+    for (const candidate of candidates) {
+      try {
+        if (!toolsSerial.isOwner())
+          await toolsSerial.acquire({ source: 'tools' });
+        if (!toolsSerial.isOwner()) return false;
+        await candidate.open({ baudRate: BAUDRATE, bufferSize: 65536 });
+        port = candidate;
+        reader = port.readable.getReader();
+        writer = port.writable.getWriter();
+        toolsSerialSession++;
+        startReading();
+        toolsSerial.setState('connected', { reason: 'firmware-assets' });
+        return true;
+      } catch (e) {
+        if (port === candidate)
+          await disconnectPort({ reason: 'connection-error' });
+        else
+          try {
+            await candidate.close();
+          } catch (closeError) {}
+      }
+    }
+    return false;
+  }
+
+  async function installAssetsAfterFlash(pack) {
+    const flashPortInfo = port?.getInfo?.() || null;
+    setFlashStepWaiting('restart');
+    log(t('fwAssetsWaitRadio'), 'info');
+    const deadline = performance.now() + ASSET_RADIO_TIMEOUT_MS;
+    while (performance.now() < deadline) {
+      if (!port || !writer) await openRadioPortForAssets(flashPortInfo);
+      let dev = null;
+      if (port && writer) {
+        try {
+          readBuffer = [];
+          dev = await requestDeviceInfo({ timeoutMs: 1000, quiet: true });
+        } catch (e) {
+          dev = null;
+        }
+      }
+      if (dev) {
+        setFlashStep('restart', 'done', 'flash_step_detected');
+        setFlashStep('assets', 'active');
+        try {
+          await writeFirmwareAssets(
+            ASSET_RUNNING_SLOT,
+            pack,
+            dev.timestamp,
+            (fraction) => setFlashStepProgress('assets', fraction),
+          );
+          setFlashStep('assets', 'done', 'flash_step_done');
+          setFlashStepsComplete(true);
+          log(t('programmingComplete'), 'success');
+        } catch (e) {
+          setFlashStep('assets', 'error', 'flash_step_failed');
+          log(t('fwAssetsError', e?.message ?? String(e)), 'error');
+          pendingFirmwareAssets = pack;
+          log(t('fwAssetsReconnect'), 'info');
+        }
+        return;
+      }
+      await sleep(500);
+    }
+    setFlashStep('restart', 'error', 'flash_step_failed');
+    pendingFirmwareAssets = pack;
+    log(t('fwAssetsReconnect'), 'info');
+  }
+
+  // Whether the running firmware can write the assets of a slot: one without
+  // the 0x075x commands (before 7.0) cannot, and the firmware written there
+  // would then boot to a blank screen, so the slot is not written at all.
+  async function slotCanWriteAssets(slot) {
+    try {
+      await assetInfo(slot, 1500);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Assets of a firmware written into a multiboot slot. The slot being the
+  // running one (its build differs from the new image) leaves them for
+  // "Install firmware assets" once the slot has been restored.
+  async function slotWriteAssets(slot, pack, ts) {
+    const info = await assetInfo(slot, 1500);
+    if (info.runningSlot === slot) {
+      log(t('fwAssetsSlotRunning', slot), 'info');
+      pendingFirmwareAssets = pack;
+      return;
+    }
+    await writeFirmwareAssets(slot, pack, ts);
+  }
+
   function slotRenderRow(slot, info) {
     slotStatuses[slot] = info ? info.status : null;
     if (!slotsTableBody) return;
@@ -3204,7 +4026,7 @@
       ? hdr.name || '—'
       : '—';
     row.querySelector('.slot-version').textContent = committed
-      ? hdr.fwVersion || '—'
+      ? tableActionVersionLabel(hdr.fwVersion) || '—'
       : '—';
     row.querySelector('.slot-size').textContent = committed
       ? `${Math.round(hdr.imageSize / 1024)} KB`
@@ -3221,6 +4043,11 @@
     stateCell.className =
       'slot-state ' +
       (valid ? 'ok' : info && info.status === 1 ? 'empty' : 'bad');
+    row
+      .querySelectorAll('.slot-act-erase, .slot-act-reset')
+      .forEach((button) => {
+        button.hidden = !committed;
+      });
     slotRenderUpdateIndicator(row);
   }
 
@@ -3230,10 +4057,38 @@
       .toLowerCase();
   }
 
+  const tableActionIcons = {
+    update:
+      '<svg class="table-action-update-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v6h-6"/></svg>',
+    reset:
+      '<svg class="table-action-reset-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m7 21-4.3-4.3a2.4 2.4 0 0 1 0-3.4L13 3a2.4 2.4 0 0 1 3.4 0L21 7.6a2.4 2.4 0 0 1 0 3.4L11 21"/><path d="m5 11 9 9"/><path d="M7 21h15"/></svg>',
+    delete:
+      '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></svg>',
+  };
+
+  function tableActionVersionLabel(version) {
+    const value = String(version || '').trim();
+    if (!value) return '';
+    return value.replace(/^v(?=\d)/i, '');
+  }
+
+  function setTableActionIcon(button, icon, label, visibleDetail = '') {
+    if (!button) return;
+    button.innerHTML = tableActionIcons[icon] || '';
+    button.classList.toggle('has-detail', Boolean(visibleDetail));
+    if (visibleDetail) {
+      const detail = document.createElement('span');
+      detail.className = 'table-action-detail';
+      detail.textContent = visibleDetail;
+      button.appendChild(detail);
+    }
+    button.title = label;
+    button.setAttribute('aria-label', label);
+  }
+
   function slotRenderUpdateIndicator(row) {
     const button = row.querySelector('.slot-update-button');
-    const current = row.querySelector('.update-current');
-    if (!button || !current) return;
+    if (!button) return;
     const latest = slotLatestVersions.get(
       slotCatalogKey(row.dataset.slotEdition),
     );
@@ -3241,24 +4096,18 @@
       ? appCompareVersions(row.dataset.slotVersion, latest.version)
       : null;
     const outdated = comparison !== null && comparison < 0;
-    const upToDate = comparison === 0;
     button.hidden = !outdated;
-    current.hidden = !upToDate;
-    current.textContent = upToDate ? t('updateCurrent') : '';
     button.disabled =
       !outdated ||
       !serialSupported ||
       slotUpdateDownloadPending ||
       Boolean(activeOperationToken);
     if (outdated) {
-      const label = t('appUpdateAction', `v${latest.version}`);
-      button.textContent = label;
-      button.title = label;
-      button.setAttribute('aria-label', label);
+      const targetVersion = tableActionVersionLabel(latest.version);
+      const detail = t('appUpdateAction', targetVersion);
+      setTableActionIcon(button, 'update', detail, targetVersion);
     } else {
-      button.textContent = '';
-      button.removeAttribute('title');
-      button.removeAttribute('aria-label');
+      setTableActionIcon(button, 'update', t('appUpdateShort'));
     }
   }
 
@@ -3279,34 +4128,37 @@
         `<td class="slot-idx">${s}</td>` +
         `<td class="slot-name">—</td>` +
         `<td class="slot-version">—</td>` +
-        `<td class="slot-update-cell"><span class="update-current" hidden></span></td>` +
         `<td class="slot-size">—</td>` +
         `<td><span class="slot-state">—</span></td>` +
-        `<td class="slot-actions"></td>`;
+        `<td class="slot-actions"><div class="slot-actions-group"></div></td>`;
       const eraseBtn = document.createElement('button');
       eraseBtn.type = 'button';
-      eraseBtn.className = 'slot-act-erase';
-      eraseBtn.textContent = t('slotEraseFw');
+      eraseBtn.className = 'btn table-icon-action is-danger slot-act-erase';
+      setTableActionIcon(eraseBtn, 'delete', t('slotEraseFw'));
+      eraseBtn.hidden = true;
       eraseBtn.addEventListener('click', () => {
         void slotEraseFlow(s);
       });
       const resetBtn = document.createElement('button');
       resetBtn.type = 'button';
-      resetBtn.className = 'slot-act-reset';
-      resetBtn.textContent = t('slotResetConfig');
+      resetBtn.className = 'btn table-icon-action is-neutral slot-act-reset';
+      setTableActionIcon(resetBtn, 'reset', t('slotResetConfig'));
+      resetBtn.hidden = true;
       resetBtn.addEventListener('click', () => {
         void slotResetConfigFlow(s);
       });
       const updateBtn = document.createElement('button');
       updateBtn.type = 'button';
-      updateBtn.className = 'slot-update-button';
+      updateBtn.className =
+        'btn table-icon-action is-primary slot-update-button';
+      setTableActionIcon(updateBtn, 'update', t('appUpdateShort'));
       updateBtn.hidden = true;
       updateBtn.disabled = true;
       updateBtn.addEventListener('click', () => {
         void slotUpdateFlow(s);
       });
-      tr.querySelector('.slot-update-cell').appendChild(updateBtn);
-      const actions = tr.querySelector('.slot-actions');
+      const actions = tr.querySelector('.slot-actions-group');
+      actions.appendChild(updateBtn);
       actions.appendChild(eraseBtn);
       actions.appendChild(resetBtn);
       slotsTableBody.appendChild(tr);
@@ -3316,12 +4168,12 @@
   // Re-localize the static slot labels after a language change.
   function slotLocalize() {
     if (slotsTableBody) {
-      slotsTableBody.querySelectorAll('.slot-act-erase').forEach((b) => {
-        b.textContent = t('slotEraseFw');
-      });
-      slotsTableBody.querySelectorAll('.slot-act-reset').forEach((b) => {
-        b.textContent = t('slotResetConfig');
-      });
+      slotsTableBody
+        .querySelectorAll('.slot-act-erase')
+        .forEach((b) => setTableActionIcon(b, 'delete', t('slotEraseFw')));
+      slotsTableBody
+        .querySelectorAll('.slot-act-reset')
+        .forEach((b) => setTableActionIcon(b, 'reset', t('slotResetConfig')));
     }
     if (slotImage && slotMetaEl) {
       slotMetaEl.textContent = t(
@@ -3335,12 +4187,7 @@
   }
 
   async function finishSlotOperation(op) {
-    try {
-      if (activeToolsView !== 'slots' && toolsSerial.isOwner())
-        await disconnect();
-    } finally {
-      endToolsOperation(op);
-    }
+    endToolsOperation(op);
   }
 
   // Smart default target: first empty slot (no FMB1 header), else the first user slot.
@@ -3447,7 +4294,15 @@
       const dev = await requestDeviceInfo();
       const ts = dev.timestamp;
       const image = slotImage;
+      const assets = slotAssets;
       const crc = crc32Bytes(image);
+      if (assets && !(await slotCanWriteAssets(slot))) {
+        const text = slotNeedsV7Text(dev.name);
+        log(text, 'error');
+        if (progressContainer) progressContainer.style.display = 'none';
+        showSlotAssetsModal(text);
+        return;
+      }
 
       log(t('slotErasing', slot), 'info');
       let st = await slotErase(slot, ts);
@@ -3481,8 +4336,9 @@
       const v = await slotValidate(slot);
       if (v.status !== 0 || v.crc !== crc)
         throw new Error('verify: ' + slotStatusText(v.status));
-      updateProgress(100);
       log(t('slotWriteOk', slot), 'success');
+      if (assets) await slotWriteAssets(slot, assets, ts);
+      updateProgress(100);
       slotRenderRow(slot, await slotInfo(slot));
       slotPickDefaultTarget();
       setTimeout(() => {
@@ -3497,6 +4353,7 @@
 
   function clearSlotImage() {
     slotImage = null;
+    slotAssets = null;
     slotMeta = { name: '', fwVersion: '' };
     if (slotNameInput) slotNameInput.value = '';
     if (slotFileName) {
@@ -3529,7 +4386,18 @@
   }
 
   function setSlotImageBuffer(buf, name = 'firmware.bin') {
-    slotImage = new Uint8Array(buf);
+    let parts;
+    try {
+      parts = window.UVStudioFirmwarePackage.splitFirmwarePackage(
+        new Uint8Array(buf),
+      );
+    } catch (e) {
+      log(t('fwPackageInvalid', name, e?.message ?? String(e)), 'error');
+      clearSlotImage();
+      return false;
+    }
+    slotImage = parts.image;
+    slotAssets = parts.pack;
     slotMeta = slotExtractMeta(slotImage, name);
     if (slotNameInput) slotNameInput.value = slotMeta.name;
     if (slotFileName) {
@@ -3547,6 +4415,7 @@
       );
     }
     log(t('slotFileLoaded', name), 'success');
+    if (slotAssets) log(t('fwAssetsDetected', slotAssets.length), 'info');
     updateActionButtons();
     return true;
   }
@@ -3647,10 +4516,13 @@
   // Parallels the firmware-slots feature, targeting the external-flash "Apps"
   // region via the 0x073x command family. A .app file already carries its 64-byte
   // header (built by pack_app.py), so we just split header/code and write both.
-  const APP_SLOT_COUNT = 16; // firmware capacity (0..15)
+  const APP_SLOT_COUNT = 64; // v7.0.0+ Fusion capacity (0..63)
+  const APP_V6_SLOT_COUNT = 48; // firmware capacity after v6.1.0 and before v7
+  const APP_LEGACY_SLOT_COUNT = 16; // firmware capacity through v6.1.0
   const APP_SLOT_FIRST = 0; // first physical slot index
-  const APP_SLOT_LAST = APP_SLOT_COUNT - 1; // expose the full capacity (shown as 1..16)
   const appSlotLabel = (s) => String(s + 1); // physical slot -> user-facing number
+  const APP_REGION_BASE = 0x102000; // physical external-flash address of slot 0
+  const APP_SLOT_STRIDE = 0x2000; // complete slot: metadata/assets + code sectors
   const APP_IMG_OFFSET = 0x1000; // code starts after the header sector
   const APP_HDR_SIZE = 64;
   const APP_ASSET_OFFSET = 0x100; // read-only assets live in the header sector (API level 2)
@@ -3668,7 +4540,7 @@
   const MSG_APP_VALIDATE = 0x0736,
     MSG_APP_VALIDATE_RESP = 0x0737;
 
-  // APP_ERR_* (0..8) -> i18n status keys.
+  // APP_ERR_* (0..9) -> i18n status keys.
   const APP_STATUS_KEY = [
     'appStateValid',
     'appStateBadSlot',
@@ -3679,7 +4551,11 @@
     'appStateCrc',
     'appStateVma',
     'appStateAuth',
+    'appStateCap',
   ];
+  // APP_ERR_ABI and APP_ERR_CAP: the image is intact, only the running firmware
+  // cannot launch it (it says why on the radio). Not an install failure.
+  const APP_STATUS_INCOMPATIBLE = new Set([3, 9]);
   function appStatusText(code) {
     return t(APP_STATUS_KEY[code] || 'slotStateError');
   }
@@ -3724,14 +4600,60 @@
     return version.split('.').concat('0', '0').slice(0, 3).join('.');
   }
 
+  function appSlotCountForFirmware(name) {
+    const version = appFirmwareVersionFromName(name);
+    if (!version) return APP_LEGACY_SLOT_COUNT;
+    if (appCompareVersions(version, '7.0.0') >= 0) return APP_SLOT_COUNT;
+    if (appCompareVersions(version, '6.1.0') > 0) return APP_V6_SLOT_COUNT;
+    return APP_LEGACY_SLOT_COUNT;
+  }
+
   const appFileInput = document.getElementById('appFile');
   const appFileLabel = document.getElementById('appFileLabel');
   const appFileName = document.getElementById('appFileName');
   const appTargetSelect = document.getElementById('appTarget');
   const appInstallBtn = document.getElementById('appInstallBtn');
-  const appsRefreshBtn = document.getElementById('appsRefreshBtn');
   const appsTableBody = document.getElementById('appsTableBody');
   const appMetaEl = document.getElementById('appMeta');
+  const appsTableWrap = document.getElementById('appsTableWrap');
+  const appRefreshBtn = document.getElementById('appRefreshBtn');
+  const appDeleteAllBtn = document.getElementById('appDeleteAllBtn');
+  const appDeleteAllModal = document.getElementById('appDeleteAllModal');
+  const appDeleteAllTitle = document.getElementById('appDeleteAllTitle');
+  const appDeleteAllBody = document.getElementById('appDeleteAllBody');
+  const appDeleteAllClose = document.getElementById('appDeleteAllClose');
+  const appDeleteAllCancelBtn = document.getElementById(
+    'appDeleteAllCancelBtn',
+  );
+  const appDeleteAllConfirmBtn = document.getElementById(
+    'appDeleteAllConfirmBtn',
+  );
+  const appRenumberBtn = document.getElementById('appRenumberBtn');
+  const appOrderActions = document.getElementById('appOrderActions');
+  const appOrderApplyBtn = document.getElementById('appOrderApplyBtn');
+  const appOrderCancelBtn = document.getElementById('appOrderCancelBtn');
+  // Shown when the Catalog tab is requested while a new order is pending.
+  const appOrderNotice = document.getElementById('appOrderNotice');
+  const appEmptyInstalled = document.getElementById('appEmptyInstalled');
+  const appEmptyInstalledText = document.getElementById(
+    'appEmptyInstalledText',
+  );
+  const appInstalledCount = document.getElementById('appInstalledCount');
+  const appInstalledTabCount = document.getElementById('appInstalledTabCount');
+  const appCapacityText = document.getElementById('appCapacityText');
+  const appCapacityBar = document.getElementById('appCapacityBar');
+  const appManagerFirmware = document.getElementById('appManagerFirmware');
+  const appManagerCompatibility = document.getElementById(
+    'appManagerCompatibility',
+  );
+  const appInstalledTab = document.getElementById('appInstalledTab');
+  const appCatalogTab = document.getElementById('appCatalogTab');
+  const appCommunityTab = document.getElementById('appCommunityTab');
+  const appManagerPanels = {
+    installed: [appInstalledTab, document.getElementById('appInstalledPanel')],
+    catalog: [appCatalogTab, document.getElementById('appCatalogPanel')],
+    community: [appCommunityTab, document.getElementById('appCommunityPanel')],
+  };
 
   let appImage = null; // full .app bytes (header + code)
   let appMeta = { name: '', version: '', codeSize: 0, assetSize: 0 };
@@ -3739,69 +4661,265 @@
   let appImageLoadAbort = null;
   let appLatestVersions = new Map();
   let appCompatibleVersions = new Map();
+  // Community apps by header name (app-catalog.js): their rows get a badge, and
+  // a newer published version the update button, checked against its sha256.
+  let appCommunityApps = new Map();
   let appCurrentFirmwareVersion = '';
+  let appCurrentFirmwareName = '';
+  let appActiveSlotCount = APP_SLOT_COUNT;
   let appCompatibilityKnown = false;
   let appUpdateDownloadPending = false;
+  const appSlotStatuses = new Map();
+  let appOrderBaseline = [];
+  let appOrderDraft = [];
+  let appOrderDragSlot = null;
+  let appOrderDropIndex = null;
 
-  // --- Labs-only feature modal ------------------------------------------------
-  // Shown when the booted firmware lacks a Labs-only service: overlay apps (it
-  // never answers 0x0730) or external-flash access (0x0738, used by External Flash
-  // and Factory reset). Reuses the shared .modal styling; no "flash" button on
-  // purpose - it names the feature and says that Labs is required.
-  const labsRequiredModal = document.getElementById('labsRequiredModal');
-  const labsRequiredClose = document.getElementById('labsRequiredClose');
-  const labsRequiredBody = document.getElementById('labsRequiredBody');
+  function appManagerSelectPanel(name) {
+    Object.entries(appManagerPanels).forEach(([key, [tab, panel]]) => {
+      const active = key === name;
+      if (tab) {
+        tab.classList.toggle('active', active);
+        tab.setAttribute('aria-selected', String(active));
+        tab.tabIndex = active ? 0 : -1;
+      }
+      if (panel) {
+        panel.classList.toggle('active', active);
+        panel.hidden = !active;
+      }
+    });
+  }
 
-  function escapeHtml(text) {
-    return String(text).replace(
-      /[&<>"']/g,
-      (c) =>
-        ({
-          '&': '&amp;',
-          '<': '&lt;',
-          '>': '&gt;',
-          '"': '&quot;',
-          "'": '&#39;',
-        })[c],
+  function appUpdateManagerSummary() {
+    let installed = 0;
+    for (const status of appSlotStatuses.values())
+      if (status === 0) installed++;
+    if (appInstalledCount)
+      appInstalledCount.textContent = t('appManagerInstalledCount', installed);
+    if (appInstalledTabCount)
+      appInstalledTabCount.textContent = String(installed);
+    if (appCapacityText)
+      appCapacityText.textContent = t(
+        'appManagerCapacity',
+        installed,
+        appActiveSlotCount,
+      );
+    if (appCapacityBar) {
+      appCapacityBar.setAttribute('aria-valuemax', String(appActiveSlotCount));
+      appCapacityBar.setAttribute('aria-valuenow', String(installed));
+      const fill = appCapacityBar.querySelector('span');
+      if (fill) fill.style.width = `${(installed / appActiveSlotCount) * 100}%`;
+    }
+    const ready = appSlotStatuses.size === appActiveSlotCount;
+    const free = ready
+      ? [...appSlotStatuses.values()].filter((status) => status === 2).length
+      : 0;
+    if (appEmptyInstalled) {
+      appEmptyInstalled.hidden = installed !== 0;
+    }
+    if (appEmptyInstalledText) {
+      appEmptyInstalledText.textContent = ready
+        ? t('appManagerNoInstalled')
+        : t('appManagerConnectHint');
+    }
+    const apps = [];
+    appsTableBody?.querySelectorAll('tr[data-app-name]').forEach((row) => {
+      const slot = Number.parseInt(row.dataset.slot || '', 10);
+      if (!Number.isInteger(slot) || appSlotStatuses.get(slot) !== 0) return;
+      apps.push({
+        slot,
+        name: row.dataset.appName || '',
+        version: row.dataset.appVersion || '',
+      });
+    });
+    window.dispatchEvent(
+      new CustomEvent('uvstudio:appinventory', {
+        detail: { ready, installed, free, apps },
+      }),
     );
   }
 
-  // featureKey: the feature's navigation label (studio_nav_*).
-  function showLabsRequiredModal(featureKey) {
-    if (!labsRequiredModal) return;
-    // Trusted static locale string (<strong> markup), the feature name escaped.
-    if (labsRequiredBody)
-      labsRequiredBody.innerHTML = t(
-        'labsRequiredBody',
-        escapeHtml(t(featureKey)),
+  function appSelectFirstEmptySlot() {
+    if (!appTargetSelect) return;
+    const free = [...appTargetSelect.options].find(
+      (option) => appSlotStatuses.get(Number(option.value)) === 2,
+    );
+    if (free) appTargetSelect.value = free.value;
+  }
+
+  function appOrderIsDirty() {
+    return (
+      appOrderBaseline.length === appOrderDraft.length &&
+      appOrderBaseline.some((slot, index) => slot !== appOrderDraft[index])
+    );
+  }
+
+  function appOrderMoves(baseline = appOrderBaseline, draft = appOrderDraft) {
+    return baseline
+      .map((target, index) => ({ target, source: draft[index] }))
+      .filter((move) => move.source !== move.target);
+  }
+
+  function appOrderSupported() {
+    return (
+      appSlotStatuses.size === appActiveSlotCount &&
+      appCompareVersions(appCurrentFirmwareVersion, '6.1.0') > 0
+    );
+  }
+
+  function appCanReorder() {
+    return appOrderSupported() && appOrderDraft.length > 1;
+  }
+
+  function appRenumberMoves(installed = appOrderBaseline) {
+    if (!installed.length) return [];
+    const last = installed[installed.length - 1];
+    const installedSet = new Set(installed);
+    const slots = Array.from({ length: last + 1 }, (_, slot) => slot);
+    const sources = installed.concat(
+      slots.filter((slot) => !installedSet.has(slot)),
+    );
+    return slots
+      .map((target, index) => ({ target, source: sources[index] }))
+      .filter((move) => move.source !== move.target);
+  }
+
+  function appCanRenumber() {
+    return (
+      appOrderSupported() && !appOrderIsDirty() && appRenumberMoves().length > 0
+    );
+  }
+
+  function appRenderOrder() {
+    if (!appsTableBody) return;
+    const rows = new Map(
+      [...appsTableBody.querySelectorAll('tr[data-slot]')].map((row) => [
+        Number(row.dataset.slot),
+        row,
+      ]),
+    );
+    const sourceByTarget = new Map(
+      appOrderBaseline.map((target, index) => [target, appOrderDraft[index]]),
+    );
+
+    for (let target = APP_SLOT_FIRST; target < appActiveSlotCount; target++) {
+      const source = sourceByTarget.has(target)
+        ? sourceByTarget.get(target)
+        : target;
+      const row = rows.get(source);
+      if (!row) continue;
+      row.dataset.targetSlot = String(target);
+      row.querySelector('.slot-idx').textContent = appSlotLabel(target);
+      row.classList.toggle('app-slot-order-pending', source !== target);
+      appsTableBody.appendChild(row);
+    }
+  }
+
+  function appResetOrder() {
+    appOrderBaseline = [...appSlotStatuses.entries()]
+      .filter(([, status]) => status === 0)
+      .map(([slot]) => slot)
+      .sort((a, b) => a - b);
+    appOrderDraft = [...appOrderBaseline];
+    appRenderOrder();
+    updateAppButtons();
+  }
+
+  function appClearOrderDropMarker() {
+    if (!appsTableBody) return;
+    appsTableBody
+      .querySelectorAll('.app-order-drop-before, .app-order-drop-after')
+      .forEach((row) => {
+        row.classList.remove('app-order-drop-before', 'app-order-drop-after');
+      });
+  }
+
+  function appOrderDragStart(slot, event) {
+    const busy = appUpdateDownloadPending || Boolean(activeOperationToken);
+    if (
+      !appCanReorder() ||
+      busy ||
+      appOrderDraft.indexOf(slot) < 0 ||
+      event.target.closest('button, a, input, select')
+    ) {
+      event.preventDefault();
+      return;
+    }
+    appOrderDragSlot = slot;
+    appOrderDropIndex = appOrderDraft.indexOf(slot);
+    event.currentTarget.classList.add('app-order-dragging');
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', String(slot));
+  }
+
+  function appOrderDragOver(targetSlot, event) {
+    if (appOrderDragSlot === null) return;
+    const targetIndex = appOrderDraft.indexOf(targetSlot);
+    const sourceIndex = appOrderDraft.indexOf(appOrderDragSlot);
+    if (targetIndex < 0 || sourceIndex < 0) return;
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    const row = event.currentTarget;
+    const bounds = row.getBoundingClientRect();
+    const after = event.clientY >= bounds.top + bounds.height / 2;
+    let insertIndex = targetIndex + (after ? 1 : 0);
+    if (sourceIndex < insertIndex) insertIndex--;
+    appOrderDropIndex = Math.max(
+      0,
+      Math.min(appOrderDraft.length - 1, insertIndex),
+    );
+
+    appClearOrderDropMarker();
+    if (targetSlot !== appOrderDragSlot)
+      row.classList.add(
+        after ? 'app-order-drop-after' : 'app-order-drop-before',
       );
-    labsRequiredModal.classList.add('show');
-    labsRequiredModal.setAttribute('aria-hidden', 'false');
-    if (labsRequiredClose)
-      requestAnimationFrame(() => labsRequiredClose.focus());
+
+    if (appsTableWrap) {
+      const viewport = appsTableWrap.getBoundingClientRect();
+      const edge = 48;
+      if (event.clientY < viewport.top + edge) appsTableWrap.scrollTop -= 14;
+      else if (event.clientY > viewport.bottom - edge)
+        appsTableWrap.scrollTop += 14;
+    }
   }
-  function hideLabsRequiredModal() {
-    if (!labsRequiredModal) return;
-    labsRequiredModal.classList.remove('show');
-    labsRequiredModal.setAttribute('aria-hidden', 'true');
+
+  function appOrderDrop(event) {
+    if (appOrderDragSlot === null || appOrderDropIndex === null) return;
+    event.preventDefault();
+    const sourceIndex = appOrderDraft.indexOf(appOrderDragSlot);
+    if (sourceIndex >= 0 && sourceIndex !== appOrderDropIndex) {
+      const [slot] = appOrderDraft.splice(sourceIndex, 1);
+      appOrderDraft.splice(appOrderDropIndex, 0, slot);
+      appRenderOrder();
+      updateAppButtons();
+    }
+    appOrderDragEnd();
   }
-  if (labsRequiredClose)
-    labsRequiredClose.addEventListener('click', hideLabsRequiredModal);
-  if (labsRequiredModal) {
-    labsRequiredModal.addEventListener('click', (e) => {
-      if (e.target === labsRequiredModal) hideLabsRequiredModal();
-    });
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && labsRequiredModal.classList.contains('show'))
-        hideLabsRequiredModal();
-    });
+
+  function appOrderDragEnd() {
+    if (appsTableBody) {
+      appsTableBody.querySelectorAll('.app-order-dragging').forEach((row) => {
+        row.classList.remove('app-order-dragging');
+      });
+    }
+    appClearOrderDropMarker();
+    appOrderDragSlot = null;
+    appOrderDropIndex = null;
+  }
+
+  function appCancelOrder() {
+    appOrderDraft = [...appOrderBaseline];
+    appRenderOrder();
+    updateAppButtons();
   }
 
   // Shared capability gate for every app action (scan, install, delete). A firmware
   // without overlay-app support never answers 0x0730, so rather than let a later
   // erase/write hang on a 30 s timeout we probe one slot up front. Returns the
-  // slot-0 info when supported; on an unsupported firmware it shows the modal and
-  // returns null so the caller aborts. `fw` is the device-info result (for naming).
+  // slot-0 info when supported, or null so the caller aborts. The navigation owns
+  // the user-facing compatibility state; `fw` is retained for diagnostic logging.
   async function appsProbe(fw) {
     try {
       try {
@@ -3815,7 +4933,6 @@
       if (e?.code === 'UVSTUDIO_SERIAL_SESSION_CHANGED' || !port) throw e;
       const name = (fw && fw.name) || t('appUnknownFirmware');
       log(t('appUnsupportedLog', name), 'error'); // firmware still named in the log for diagnostics
-      showLabsRequiredModal('studio_nav_apps');
       return null;
     }
   }
@@ -3845,12 +4962,12 @@
     };
   }
 
-  async function appInfo(slot) {
+  async function appInfo(slot, timeoutMs = 3000) {
     const data = await slotCommand(
       MSG_APP_INFO,
       Uint8Array.of(slot),
       MSG_APP_INFO_RESP,
-      3000,
+      timeoutMs,
     );
     return {
       slot,
@@ -3894,6 +5011,107 @@
       )
     )[1];
   }
+  // Slot info only tells that an app is there. Ask the firmware whether it can
+  // launch it (ABI, API level, capabilities): the same check as on the radio.
+  // info.compat holds that APP_ERR_* verdict, 0 when launchable or unknown.
+  async function appCheckCompat(info) {
+    if (!info || info.status !== 0) return info;
+    try {
+      info.compat = await appValidate(info.slot);
+    } catch (e) {
+      if (e?.code === 'UVSTUDIO_SERIAL_SESSION_CHANGED' || !port) throw e;
+      info.compat = 0;
+    }
+    return info;
+  }
+
+  function appSlotAddress(slot) {
+    return APP_REGION_BASE + slot * APP_SLOT_STRIDE;
+  }
+
+  async function appReadSlotImage(slot, timestamp) {
+    const image = new Uint8Array(APP_SLOT_STRIDE);
+    const base = appSlotAddress(slot);
+    for (let offset = 0; offset < image.length; offset += FLASH_DUMP_CHUNK) {
+      const length = Math.min(FLASH_DUMP_CHUNK, image.length - offset);
+      image.set(
+        await readExternalFlashChunk(base + offset, length, timestamp),
+        offset,
+      );
+    }
+    return image;
+  }
+
+  async function appVerifySlotSector(
+    expected,
+    address,
+    timestamp,
+    crcSupported,
+  ) {
+    if (crcSupported) {
+      const actualCrc = await readExternalFlashCrc32(
+        address,
+        expected.length,
+        timestamp,
+      );
+      if (actualCrc === crc32Bytes(expected)) return;
+    }
+
+    for (let offset = 0; offset < expected.length; offset += FLASH_DUMP_CHUNK) {
+      const chunk = expected.subarray(
+        offset,
+        Math.min(offset + FLASH_DUMP_CHUNK, expected.length),
+      );
+      const actual = await readExternalFlashChunk(
+        address + offset,
+        chunk.length,
+        timestamp,
+      );
+      for (let index = 0; index < chunk.length; index++) {
+        if (actual[index] !== chunk[index]) {
+          throw new Error(
+            t('flashVerifyError', flashAddress(address + offset + index)),
+          );
+        }
+      }
+    }
+  }
+
+  async function appWriteSlotImage(slot, image, timestamp, crcSupported) {
+    const base = appSlotAddress(slot);
+    for (
+      let sectorOffset = 0;
+      sectorOffset < APP_SLOT_STRIDE;
+      sectorOffset += FLASH_SECTOR_SIZE
+    ) {
+      const sector = image.subarray(
+        sectorOffset,
+        sectorOffset + FLASH_SECTOR_SIZE,
+      );
+      const address = base + sectorOffset;
+      if (
+        crcSupported &&
+        (await readExternalFlashCrc32(address, sector.length, timestamp)) ===
+          crc32Bytes(sector)
+      )
+        continue;
+
+      await eraseExternalFlashSector(address, timestamp);
+      for (
+        let offset = 0;
+        offset < sector.length;
+        offset += FLASH_WRITE_CHUNK
+      ) {
+        const chunk = sector.subarray(
+          offset,
+          Math.min(offset + FLASH_WRITE_CHUNK, sector.length),
+        );
+        if (chunk.every((value) => value === 0xff)) continue;
+        await writeExternalFlashChunk(address + offset, chunk, timestamp);
+      }
+      await appVerifySlotSector(sector, address, timestamp, crcSupported);
+    }
+  }
 
   function appRenderRow(slot, info) {
     if (!appsTableBody) return;
@@ -3901,26 +5119,66 @@
     if (!row) return;
     const valid = info && info.status === 0;
     const hdr = info && info.hdr;
+    row.classList.remove('app-slot-pending');
+    row.classList.toggle('app-slot-installed', Boolean(valid));
+    row.classList.toggle('app-slot-empty', Boolean(info && info.status === 2));
     row.querySelector('.slot-name').textContent = valid ? hdr.name || '—' : '—';
     row.querySelector('.slot-version-value').textContent = valid
       ? hdr.version || '—'
       : '—';
-    row.querySelector('.slot-size').textContent = valid
-      ? `${(hdr.codeSize / 1024).toFixed(1)} KB`
-      : '—';
     if (valid) {
       row.dataset.appName = hdr.name || '';
       row.dataset.appVersion = hdr.version || '';
+      row.dataset.appCodeSize = String(hdr.codeSize || 0);
+      row.dataset.appAssetSize = String(hdr.assetSize || 0);
     } else {
       delete row.dataset.appName;
       delete row.dataset.appVersion;
+      delete row.dataset.appCodeSize;
+      delete row.dataset.appAssetSize;
     }
-    if (info) row.dataset.appStatus = String(info.status);
-    else delete row.dataset.appStatus;
+    if (valid && info.compat) row.dataset.appCompat = String(info.compat);
+    else delete row.dataset.appCompat;
+    if (info) {
+      row.dataset.appStatus = String(info.status);
+      appSlotStatuses.set(slot, info.status);
+    } else {
+      delete row.dataset.appStatus;
+      appSlotStatuses.delete(slot);
+    }
+    appRenderRowSize(row);
     appRenderRowState(row);
+    appRenderCommunityBadge(row);
     const del = row.querySelector('.app-act-delete');
-    if (del) del.disabled = !valid;
+    if (del) {
+      del.hidden = !valid;
+      del.disabled = !valid;
+    }
     appRenderUpdateIndicator(row);
+  }
+
+  function appFormatBytes(size) {
+    const bytes = Number.isFinite(size) && size > 0 ? size : 0;
+    return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`;
+  }
+
+  function appRenderRowSize(row) {
+    const code = row.querySelector('.slot-code-size');
+    const assets = row.querySelector('.slot-asset-size');
+    if (!code || !assets) return;
+    if (!row.dataset.appName) {
+      code.textContent = '—';
+      assets.textContent = '';
+      return;
+    }
+    code.textContent = t(
+      'appSizeCode',
+      appFormatBytes(Number(row.dataset.appCodeSize)),
+    );
+    assets.textContent = t(
+      'appSizeAssets',
+      appFormatBytes(Number(row.dataset.appAssetSize)),
+    );
   }
 
   function appHasFirmwareMismatch(row) {
@@ -3942,52 +5200,85 @@
       return;
     }
     const status = Number(row.dataset.appStatus);
-    const mismatch = status === 0 && appHasFirmwareMismatch(row);
-    stateCell.textContent = mismatch
-      ? t('appStateFirmwareMismatch', appCurrentFirmwareVersion)
-      : appStatusText(status);
+    // The firmware's own verdict comes first; the catalog only knows published apps.
+    const compat = status === 0 ? Number(row.dataset.appCompat || 0) : 0;
+    const mismatch = status === 0 && !compat && appHasFirmwareMismatch(row);
+    stateCell.textContent = compat
+      ? appStatusText(compat)
+      : mismatch
+        ? t('appStateFirmwareMismatch', appCurrentFirmwareVersion)
+        : appStatusText(status);
     stateCell.className =
       'slot-state ' +
-      (mismatch ? 'bad' : status === 0 ? 'ok' : status === 2 ? 'empty' : 'bad');
+      (compat || mismatch
+        ? 'bad'
+        : status === 0
+          ? 'ok'
+          : status === 2
+            ? 'empty'
+            : 'bad');
+  }
+
+  function appRenderCommunityBadge(row) {
+    const cell = row.querySelector('.slot-name');
+    if (!cell) return;
+    let badge = cell.querySelector('.app-community-badge');
+    if (
+      !row.dataset.appName ||
+      !appCommunityApps.has(appCatalogKey(row.dataset.appName))
+    ) {
+      if (badge) badge.remove();
+      return;
+    }
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'app-community-badge';
+      cell.appendChild(badge);
+    }
+    badge.textContent = t('appManagerCommunity');
+    badge.title = t('appCommunityBadgeHint');
+  }
+
+  // The version an installed app can be updated to: the official catalog of the
+  // radio's firmware, else the community's (whose ids never clash with it).
+  function appLatestAvailable(row) {
+    const key = appCatalogKey(row.dataset.appName);
+    if (appCompatibilityKnown && appCompatibleVersions.has(key))
+      return appCompatibleVersions.get(key);
+    return appCommunityApps.get(key) || null;
   }
 
   function appRenderUpdateIndicator(row) {
     const button = row.querySelector('.app-update-button');
-    const current = row.querySelector('.update-current');
-    if (!button || !current) return;
-    const latest = appCompatibilityKnown
-      ? appCompatibleVersions.get(appCatalogKey(row.dataset.appName))
-      : null;
+    if (!button) return;
+    const latest = row.dataset.appName ? appLatestAvailable(row) : null;
     const comparison = latest
       ? appCompareVersions(row.dataset.appVersion, latest.version)
       : null;
     const outdated = comparison !== null && comparison < 0;
-    const upToDate = comparison === 0 && !appHasFirmwareMismatch(row);
     row.classList.toggle('app-outdated', Boolean(outdated));
     button.hidden = !outdated;
-    current.hidden = !upToDate;
-    current.textContent = upToDate ? t('updateCurrent') : '';
     if (outdated) {
-      const label = t('appUpdateAction', latest.version);
-      button.textContent = label;
-      button.title = label;
-      button.setAttribute('aria-label', label);
+      const targetVersion = tableActionVersionLabel(latest.version);
+      const detail = t('appUpdateAction', targetVersion);
+      setTableActionIcon(button, 'update', detail, targetVersion);
       button.disabled =
         !serialSupported ||
         appUpdateDownloadPending ||
-        Boolean(activeOperationToken);
+        Boolean(activeOperationToken) ||
+        appOrderIsDirty();
     } else {
-      button.textContent = '';
+      setTableActionIcon(button, 'update', t('appUpdateShort'));
       button.disabled = true;
-      button.removeAttribute('title');
-      button.removeAttribute('aria-label');
     }
   }
 
   function appRefreshUpdateIndicators() {
     if (!appsTableBody) return;
     appsTableBody.querySelectorAll('tr[data-slot]').forEach((row) => {
+      appRenderRowSize(row);
       appRenderRowState(row);
+      appRenderCommunityBadge(row);
       appRenderUpdateIndicator(row);
     });
   }
@@ -3995,39 +5286,47 @@
   function appBuildTable() {
     if (!appsTableBody) return;
     appsTableBody.innerHTML = '';
-    for (let s = APP_SLOT_FIRST; s <= APP_SLOT_LAST; s++) {
+    for (let s = APP_SLOT_FIRST; s < appActiveSlotCount; s++) {
       const tr = document.createElement('tr');
+      tr.className = 'app-slot-pending';
       tr.dataset.slot = String(s);
       tr.innerHTML =
         `<td class="slot-idx">${appSlotLabel(s)}</td>` +
         `<td class="slot-name">—</td>` +
         `<td class="slot-version"><span class="slot-version-value">—</span></td>` +
-        `<td class="app-update-cell"><span class="update-current" hidden></span></td>` +
-        `<td class="slot-size">—</td>` +
+        `<td class="slot-size"><span class="slot-code-size">—</span><span class="slot-asset-size"></span></td>` +
         `<td><span class="slot-state">—</span></td>` +
-        `<td class="slot-actions"></td>`;
+        `<td class="slot-actions"><div class="slot-actions-group"></div></td>`;
       const del = document.createElement('button');
       del.type = 'button';
-      del.className = 'app-act-delete';
-      del.textContent = t('appDelete');
+      del.className = 'btn table-icon-action is-danger app-act-delete';
+      setTableActionIcon(del, 'delete', t('appDelete'));
+      del.hidden = true;
       del.disabled = true;
       del.addEventListener('click', () => {
         void appDeleteFlow(s);
       });
-      tr.querySelector('.slot-actions').appendChild(del);
       const update = document.createElement('button');
       update.type = 'button';
-      update.className = 'app-update-button';
+      update.className = 'btn table-icon-action is-primary app-update-button';
+      setTableActionIcon(update, 'update', t('appUpdateShort'));
       update.hidden = true;
       update.disabled = true;
       update.addEventListener('click', () => {
         void appUpdateFlow(s);
       });
-      tr.querySelector('.app-update-cell').appendChild(update);
+      tr.addEventListener('dragstart', (event) => appOrderDragStart(s, event));
+      tr.addEventListener('dragover', (event) => appOrderDragOver(s, event));
+      tr.addEventListener('drop', appOrderDrop);
+      tr.addEventListener('dragend', appOrderDragEnd);
+      const actions = tr.querySelector('.slot-actions-group');
+      actions.appendChild(update);
+      actions.appendChild(del);
       appsTableBody.appendChild(tr);
     }
-    if (appTargetSelect && !appTargetSelect.options.length) {
-      for (let s = APP_SLOT_FIRST; s <= APP_SLOT_LAST; s++) {
+    if (appTargetSelect) {
+      appTargetSelect.innerHTML = '';
+      for (let s = APP_SLOT_FIRST; s < appActiveSlotCount; s++) {
         const o = document.createElement('option');
         o.value = String(s);
         o.textContent = appSlotLabel(s);
@@ -4036,24 +5335,40 @@
     }
   }
 
+  function appSetSlotCount(count) {
+    if (
+      count === appActiveSlotCount &&
+      appsTableBody?.children.length === count
+    )
+      return;
+    appActiveSlotCount = count;
+    appSlotStatuses.clear();
+    appBuildTable();
+    appResetOrder();
+    appUpdateManagerSummary();
+  }
+
   async function finishAppOperation(op) {
-    try {
-      if (activeToolsView !== 'apps' && toolsSerial.isOwner())
-        await disconnect();
-    } finally {
-      endToolsOperation(op);
-      updateAppButtons();
-    }
+    endToolsOperation(op);
+    updateAppButtons();
   }
 
   async function appRefreshFlow() {
     const op = beginToolsOperation('apps-refresh', false);
     if (!op) return;
+    appSlotStatuses.clear();
+    appResetOrder();
+    if (appsTableBody)
+      appsTableBody.querySelectorAll('tr[data-slot]').forEach((row) => {
+        row.classList.add('app-slot-pending');
+        row.classList.remove('app-slot-installed', 'app-slot-empty');
+      });
+    appUpdateManagerSummary();
     try {
       if (!port) await connect();
 
       // Capability gate. A firmware without overlay-app support (Fusion, Transfer,
-      // stock…) never answers 0x0730, so scanning all 16 slots would hang on sixteen
+      // stock…) never answers 0x0730, so scanning every advertised slot would hang
       // timeouts and then show cryptic errors - the exact confusion we want to
       // avoid. Instead: confirm the radio answers device-info (so we can name it),
       // then probe a single slot. A timeout there means "no overlay apps" -> a
@@ -4063,7 +5378,15 @@
         readBuffer = [];
         await sleep(300);
         fw = await requestDeviceInfo();
+        if (appManagerFirmware)
+          appManagerFirmware.textContent = fw.name || t('appUnknownFirmware');
+        if (appManagerCompatibility)
+          appManagerCompatibility.textContent = t(
+            'appManagerCheckingCompatibility',
+          );
         const firmwareVersion = appFirmwareVersionFromName(fw.name);
+        appCurrentFirmwareName = fw.name || '';
+        appSetSlotCount(appSlotCountForFirmware(fw.name));
         if (firmwareVersion !== appCurrentFirmwareVersion) {
           appCurrentFirmwareVersion = firmwareVersion;
           appCompatibilityKnown = false;
@@ -4086,15 +5409,18 @@
       if (!firstInfo) return; // unsupported firmware -> modal shown
 
       log(t('appsScanning'), 'info');
-      appRenderRow(APP_SLOT_FIRST, firstInfo); // already read by the probe
-      for (let s = APP_SLOT_FIRST + 1; s <= APP_SLOT_LAST; s++) {
+      appRenderRow(APP_SLOT_FIRST, await appCheckCompat(firstInfo)); // already read by the probe
+      for (let s = APP_SLOT_FIRST + 1; s < appActiveSlotCount; s++) {
         try {
-          appRenderRow(s, await appInfo(s));
+          appRenderRow(s, await appCheckCompat(await appInfo(s)));
         } catch (e) {
           if (e?.code === 'UVSTUDIO_SERIAL_SESSION_CHANGED' || !port) throw e;
           appRenderRow(s, { slot: s, status: 6, hdr: null });
         }
       }
+      appResetOrder();
+      appUpdateManagerSummary();
+      appSelectFirstEmptySlot();
       log(t('appsScanDone'), 'success');
     } catch (e) {
       log(t('appsError', e?.message ?? String(e)), 'error');
@@ -4103,7 +5429,70 @@
     }
   }
 
+  let appDeleteAllResolve = null;
+  let appDeleteAllFocusOrigin = null;
+
+  function closeAppDeleteAllModal(confirmed) {
+    if (!appDeleteAllModal?.classList.contains('show')) return;
+    const resolve = appDeleteAllResolve;
+    const focusTarget = appDeleteAllFocusOrigin;
+    appDeleteAllResolve = null;
+    appDeleteAllFocusOrigin = null;
+    appDeleteAllModal.classList.remove('show');
+    appDeleteAllModal.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+    if (focusTarget && document.contains(focusTarget)) {
+      focusTarget.focus({ preventScroll: true });
+    }
+    if (resolve) resolve(Boolean(confirmed));
+  }
+
+  function confirmAppDeleteAll(count) {
+    if (!appDeleteAllModal || appDeleteAllResolve)
+      return Promise.resolve(false);
+    appDeleteAllFocusOrigin = document.activeElement;
+    if (appDeleteAllTitle)
+      appDeleteAllTitle.textContent = t('appDeleteAllTitle');
+    if (appDeleteAllBody)
+      appDeleteAllBody.textContent = t('appDeleteAllConfirm', count);
+    appDeleteAllModal.classList.add('show');
+    appDeleteAllModal.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+    requestAnimationFrame(() => appDeleteAllCancelBtn?.focus());
+    return new Promise((resolve) => {
+      appDeleteAllResolve = resolve;
+    });
+  }
+
+  if (appDeleteAllClose) {
+    appDeleteAllClose.addEventListener('click', () =>
+      closeAppDeleteAllModal(false),
+    );
+  }
+  if (appDeleteAllCancelBtn) {
+    appDeleteAllCancelBtn.addEventListener('click', () =>
+      closeAppDeleteAllModal(false),
+    );
+  }
+  if (appDeleteAllConfirmBtn) {
+    appDeleteAllConfirmBtn.addEventListener('click', () =>
+      closeAppDeleteAllModal(true),
+    );
+  }
+  if (appDeleteAllModal) {
+    appDeleteAllModal.addEventListener('click', (event) => {
+      if (event.target === appDeleteAllModal) closeAppDeleteAllModal(false);
+    });
+    appDeleteAllModal.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') closeAppDeleteAllModal(false);
+    });
+  }
+
   async function appDeleteFlow(slot) {
+    if (appOrderIsDirty()) {
+      log(t('appOrderApplyFirst'), 'error');
+      return;
+    }
     const op = beginToolsOperation('apps-delete', true);
     if (!op) return;
     try {
@@ -4117,6 +5506,9 @@
       if (st !== 0) throw new Error(appStatusText(st));
       log(t('appErased', appSlotLabel(slot)), 'success');
       appRenderRow(slot, await appInfo(slot));
+      appResetOrder();
+      appUpdateManagerSummary();
+      appSelectFirstEmptySlot();
     } catch (e) {
       log(t('appsError', e?.message ?? String(e)), 'error');
     } finally {
@@ -4124,12 +5516,67 @@
     }
   }
 
-  async function appInstallFlow() {
+  async function appDeleteAllFlow() {
+    if (appOrderIsDirty()) {
+      log(t('appOrderApplyFirst'), 'error');
+      return;
+    }
+    if (appSlotStatuses.size !== appActiveSlotCount) return;
+    const slots = [...appSlotStatuses.entries()]
+      .filter(([, status]) => status === 0)
+      .map(([slot]) => slot)
+      .sort((a, b) => a - b);
+    if (!slots.length || !(await confirmAppDeleteAll(slots.length))) return;
+
+    const op = beginToolsOperation('apps-delete-all', true);
+    if (!op) return;
+    updateAppButtons();
+    if (progressContainer) progressContainer.style.display = 'block';
+    updateProgress(0);
+    try {
+      if (!port) await connect();
+      readBuffer = [];
+      await sleep(500);
+      const dev = await requestDeviceInfo();
+      if (!(await appsProbe(dev))) return;
+      for (let index = 0; index < slots.length; index++) {
+        const slot = slots[index];
+        log(t('appErasing', appSlotLabel(slot)), 'info');
+        const status = await appErase(slot, dev.timestamp);
+        if (status !== 0) throw new Error(appStatusText(status));
+        appRenderRow(slot, await appInfo(slot));
+        updateProgress(Math.round(((index + 1) * 100) / slots.length));
+      }
+      log(t('appDeleteAllDone'), 'success');
+    } catch (error) {
+      log(t('appsError', error?.message ?? String(error)), 'error');
+    } finally {
+      appResetOrder();
+      appUpdateManagerSummary();
+      appSelectFirstEmptySlot();
+      setTimeout(() => {
+        if (progressContainer) progressContainer.style.display = 'none';
+      }, 1200);
+      await finishAppOperation(op);
+    }
+  }
+
+  // onProgress (optional): report progress to the caller (catalog card mini gauge)
+  // instead of the shared progress bar under the tool.
+  async function appInstallFlow({ onProgress } = {}) {
+    if (appOrderIsDirty()) {
+      log(t('appOrderApplyFirst'), 'error');
+      return;
+    }
     if (!appImage) return;
+    if (appSlotStatuses.size !== appActiveSlotCount) {
+      log(t('appManagerScanBeforeInstall'), 'error');
+      return;
+    }
     const slot = appTargetSelect
       ? parseInt(appTargetSelect.value, 10)
       : APP_SLOT_FIRST;
-    if (!(slot >= APP_SLOT_FIRST && slot <= APP_SLOT_LAST)) return;
+    if (!(slot >= APP_SLOT_FIRST && slot < appActiveSlotCount)) return;
     // .app = header + code (codeSize bytes) + optional read-only assets. The code
     // goes to the code sector, the assets to the header sector at APP_ASSET_OFFSET.
     const header = appImage.subarray(0, APP_HDR_SIZE);
@@ -4152,8 +5599,18 @@
 
     const op = beginToolsOperation('apps-install', true);
     if (!op) return;
-    if (progressContainer) progressContainer.style.display = 'block';
-    updateProgress(0);
+    const inline = typeof onProgress === 'function';
+    let inlinePercent = -1;
+    const reportProgress = (percent) => {
+      if (!inline) return updateProgress(percent);
+      const rounded = Math.round(percent);
+      if (rounded === inlinePercent) return false;
+      inlinePercent = rounded;
+      onProgress(rounded);
+      return true;
+    };
+    if (!inline && progressContainer) progressContainer.style.display = 'block';
+    reportProgress(0);
     try {
       if (!port) await connect();
       readBuffer = [];
@@ -4161,7 +5618,8 @@
       const dev = await requestDeviceInfo();
       if (!(await appsProbe(dev))) {
         // unsupported firmware -> modal, abort before erase
-        if (progressContainer) progressContainer.style.display = 'none';
+        if (!inline && progressContainer)
+          progressContainer.style.display = 'none';
         return;
       }
       const ts = dev.timestamp;
@@ -4187,7 +5645,7 @@
               'write @' + (base + off) + ': ' + appStatusText(st),
             );
           done += chunk.length;
-          const changed = updateProgress((done / total) * 95);
+          const changed = reportProgress((done / total) * 95);
           if (changed) await waitForProgressPaint();
         }
       }
@@ -4195,17 +5653,29 @@
       st = await appWriteChunkRetry(slot, 0, ts, header);
       if (st !== 0) throw new Error('header: ' + appStatusText(st));
 
-      updateProgress(97);
+      reportProgress(97);
       await waitForProgressPaint();
       log(t('appVerifying', appSlotLabel(slot)), 'info');
       const vs = await appValidate(slot);
-      if (vs !== 0) throw new Error('verify: ' + appStatusText(vs));
-      updateProgress(100);
-      log(t('appInstalled', appSlotLabel(slot)), 'success');
-      appRenderRow(slot, await appInfo(slot));
-      setTimeout(() => {
-        if (progressContainer) progressContainer.style.display = 'none';
-      }, 1200);
+      if (vs !== 0 && !APP_STATUS_INCOMPATIBLE.has(vs))
+        throw new Error('verify: ' + appStatusText(vs));
+      reportProgress(100);
+      if (vs === 0) log(t('appInstalled', appSlotLabel(slot)), 'success');
+      else
+        log(
+          t('appInstalledIncompatible', appSlotLabel(slot), appStatusText(vs)),
+          'warning',
+        );
+      const installed = await appInfo(slot);
+      installed.compat = vs; // just validated: no second round trip
+      appRenderRow(slot, installed);
+      appResetOrder();
+      appUpdateManagerSummary();
+      appSelectFirstEmptySlot();
+      if (!inline)
+        setTimeout(() => {
+          if (progressContainer) progressContainer.style.display = 'none';
+        }, 1200);
     } catch (e) {
       log(t('appsError', e?.message ?? String(e)), 'error');
     } finally {
@@ -4213,17 +5683,144 @@
     }
   }
 
+  function appUpdateOrderControls() {
+    const busy = appUpdateDownloadPending || Boolean(activeOperationToken);
+    const canReorder = appCanReorder();
+    const dirty = appOrderIsDirty();
+    const canRenumber = appCanRenumber();
+    if (appRenumberBtn) {
+      appRenumberBtn.hidden = !canRenumber;
+      appRenumberBtn.disabled = busy || !canRenumber;
+    }
+    if (appOrderActions) appOrderActions.hidden = !dirty;
+    if (appOrderApplyBtn) appOrderApplyBtn.disabled = busy || !dirty;
+    if (appOrderCancelBtn) appOrderCancelBtn.disabled = busy || !dirty;
+    if (appOrderNotice && !dirty) appOrderNotice.hidden = true;
+
+    if (!appsTableBody) return;
+    appsTableBody.querySelectorAll('tr[data-slot]').forEach((row) => {
+      const slot = Number(row.dataset.slot);
+      const visible = canReorder && appSlotStatuses.get(slot) === 0;
+      row.draggable = visible && !busy;
+      row.classList.toggle('app-slot-draggable', visible && !busy);
+    });
+  }
+
+  async function appRewriteOrderFlow(
+    moves,
+    validateTargets,
+    operation,
+    doneKey,
+  ) {
+    const op = beginToolsOperation(operation, true);
+    if (!op) return;
+    updateAppButtons();
+    let storageTouched = false;
+    let refreshNeeded = false;
+    if (progressContainer) progressContainer.style.display = 'block';
+    updateProgress(0);
+
+    try {
+      if (!port) await connect();
+      readBuffer = [];
+      await sleep(300);
+      const dev = await requestDeviceInfo();
+      if (!(await appsProbe(dev))) return;
+      if (!(await hasExternalFlashSupport(dev.timestamp))) return;
+
+      const sources = [...new Set(moves.map((move) => move.source))];
+      const images = new Map();
+      log(t('appOrderReading'), 'info');
+      for (let index = 0; index < sources.length; index++) {
+        const slot = sources[index];
+        images.set(slot, await appReadSlotImage(slot, dev.timestamp));
+        updateProgress(((index + 1) / sources.length) * 35);
+        await waitForProgressPaint();
+      }
+
+      const crcSupported = await detectExternalFlashCrcSupport(dev.timestamp);
+      log(t('appOrderWriting'), 'info');
+      for (let index = 0; index < moves.length; index++) {
+        const move = moves[index];
+        storageTouched = true;
+        await appWriteSlotImage(
+          move.target,
+          images.get(move.source),
+          dev.timestamp,
+          crcSupported,
+        );
+        updateProgress(35 + ((index + 1) / moves.length) * 60);
+        await waitForProgressPaint();
+      }
+
+      for (const target of validateTargets) {
+        const status = await appValidate(target);
+        if (status !== 0 && !APP_STATUS_INCOMPATIBLE.has(status))
+          throw new Error(appStatusText(status));
+      }
+      updateProgress(100);
+      refreshNeeded = true;
+      log(t(doneKey), 'success');
+    } catch (e) {
+      refreshNeeded = storageTouched;
+      log(t('appsError', e?.message ?? String(e)), 'error');
+    } finally {
+      if (progressContainer) progressContainer.style.display = 'none';
+      await finishAppOperation(op);
+      if (refreshNeeded) await appRefreshFlow();
+    }
+  }
+
+  async function appApplyOrderFlow() {
+    if (!appCanReorder()) return;
+    const moves = appOrderMoves();
+    if (!moves.length) return;
+    await appRewriteOrderFlow(
+      moves,
+      [...new Set(moves.map((move) => move.target))],
+      'apps-reorder',
+      'appOrderDone',
+    );
+  }
+
+  async function appRenumberFlow() {
+    if (!appCanRenumber()) return;
+    const moves = appRenumberMoves();
+    await appRewriteOrderFlow(
+      moves,
+      Array.from({ length: appOrderBaseline.length }, (_, slot) => slot),
+      'apps-renumber',
+      'appRenumberDone',
+    );
+  }
+
   function updateAppButtons() {
     const busy = appUpdateDownloadPending || Boolean(activeOperationToken);
+    const orderDirty = appOrderIsDirty();
+    const inventoryReady = appSlotStatuses.size === appActiveSlotCount;
+    const installed =
+      inventoryReady &&
+      [...appSlotStatuses.values()].some((status) => status === 0);
     if (appInstallBtn)
-      appInstallBtn.disabled = !serialSupported || busy || !appImage;
-    if (appsRefreshBtn) appsRefreshBtn.disabled = !serialSupported || busy;
+      appInstallBtn.disabled =
+        !serialSupported ||
+        busy ||
+        orderDirty ||
+        !appImage ||
+        appSlotStatuses.size !== appActiveSlotCount;
+    if (appRefreshBtn)
+      appRefreshBtn.disabled = !serialSupported || busy || orderDirty;
+    if (appDeleteAllBtn)
+      appDeleteAllBtn.disabled =
+        !serialSupported || busy || orderDirty || !installed;
     if (appsTableBody) {
       appsTableBody.querySelectorAll('.app-act-delete').forEach((button) => {
-        button.disabled = busy || !button.closest('tr')?.dataset.appName;
+        button.disabled =
+          busy || orderDirty || !button.closest('tr')?.dataset.appName;
       });
       appRefreshUpdateIndicators();
     }
+    appUpdateOrderControls();
   }
 
   function clearAppImage() {
@@ -4292,13 +5889,30 @@
     return true;
   }
 
-  async function loadAppFromURL(url, catalogName = 'application.app') {
+  async function sha256Hex(buffer) {
+    const digest = new Uint8Array(
+      await crypto.subtle.digest('SHA-256', buffer),
+    );
+    return Array.from(digest, (byte) =>
+      byte.toString(16).padStart(2, '0'),
+    ).join('');
+  }
+
+  // expectedSha256: a community app must be the very file its catalog entry
+  // describes (raw.githubusercontent.com caches files and the manifest apart).
+  async function loadAppFromURL(
+    url,
+    catalogName = 'application.app',
+    expectedSha256 = '',
+  ) {
     const seq = beginAppImageLoad('catalog');
     const controller = new AbortController();
     appImageLoadAbort = controller;
     try {
       const urlObj = new URL(url);
-      if (urlObj.protocol !== 'https:') throw new Error('HTTPS required');
+      // blob: is a file of the developer's local build folder, read by this page.
+      if (urlObj.protocol !== 'https:' && urlObj.protocol !== 'blob:')
+        throw new Error('HTTPS required');
       const response = await fetch(urlObj.toString(), {
         cache: 'no-cache',
         mode: 'cors',
@@ -4306,6 +5920,12 @@
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const buf = await response.arrayBuffer();
+      if (seq !== appImageLoadSeq) return false;
+      if (expectedSha256 && (await sha256Hex(buf)) !== expectedSha256) {
+        log(t('appCommunityHashMismatch'), 'error');
+        if (seq === appImageLoadSeq) clearAppImage();
+        return false;
+      }
       if (seq !== appImageLoadSeq) return false;
       const filename =
         catalogName || urlObj.pathname.split('/').pop() || 'application.app';
@@ -4320,12 +5940,67 @@
     }
   }
 
+  async function installAppFromURL(
+    url,
+    catalogName = 'application.app',
+    options = {},
+  ) {
+    if (appOrderIsDirty()) {
+      log(t('appOrderApplyFirst'), 'error');
+      return false;
+    }
+    if (
+      appSlotStatuses.size !== appActiveSlotCount ||
+      ![...appSlotStatuses.values()].some((status) => status === 2)
+    ) {
+      log(t('appManagerNoFreeSlot'), 'error');
+      return false;
+    }
+    const loaded = await loadAppFromURL(url, catalogName, options.sha256);
+    if (!loaded) return false;
+    appSelectFirstEmptySlot();
+    await appInstallFlow(options);
+    return true;
+  }
+
+  async function updateAppFromURL(
+    slot,
+    url,
+    catalogName = 'application.app',
+    options = {},
+  ) {
+    if (!Number.isInteger(slot) || appSlotStatuses.get(slot) !== 0)
+      return false;
+    if (appOrderIsDirty()) {
+      log(t('appOrderApplyFirst'), 'error');
+      return false;
+    }
+    if (appUpdateDownloadPending || activeOperationToken) return false;
+
+    appUpdateDownloadPending = true;
+    updateAppButtons();
+    try {
+      const loaded = await loadAppFromURL(url, catalogName, options.sha256);
+      if (!loaded) return false;
+      if (appTargetSelect) appTargetSelect.value = String(slot);
+      await appInstallFlow(options);
+      return true;
+    } finally {
+      appUpdateDownloadPending = false;
+      updateAppButtons();
+    }
+  }
+
+  async function deleteAppSlot(slot) {
+    if (!Number.isInteger(slot) || appSlotStatuses.get(slot) !== 0)
+      return false;
+    await appDeleteFlow(slot);
+    return true;
+  }
+
   async function appUpdateFlow(slot) {
     const row = appsTableBody?.querySelector(`tr[data-slot="${slot}"]`);
-    const latest =
-      row && appCompatibilityKnown
-        ? appCompatibleVersions.get(appCatalogKey(row.dataset.appName))
-        : null;
+    const latest = row?.dataset.appName ? appLatestAvailable(row) : null;
     if (!latest?.url || appUpdateDownloadPending || activeOperationToken)
       return;
 
@@ -4335,6 +6010,7 @@
       const loaded = await loadAppFromURL(
         latest.url,
         latest.filename || `${latest.name}.app`,
+        latest.sha256 || '',
       );
       if (!loaded) return;
       if (appTargetSelect) appTargetSelect.value = String(slot);
@@ -4362,18 +6038,53 @@
     appInstallBtn.addEventListener('click', () => {
       void appInstallFlow();
     });
-  if (appsRefreshBtn)
-    appsRefreshBtn.addEventListener('click', () => {
+  if (appRefreshBtn)
+    appRefreshBtn.addEventListener('click', () => {
       void appRefreshFlow();
     });
+  if (appDeleteAllBtn)
+    appDeleteAllBtn.addEventListener('click', () => {
+      void appDeleteAllFlow();
+    });
+  if (appRenumberBtn)
+    appRenumberBtn.addEventListener('click', () => {
+      void appRenumberFlow();
+    });
+  if (appOrderApplyBtn)
+    appOrderApplyBtn.addEventListener('click', () => {
+      void appApplyOrderFlow();
+    });
+  if (appOrderCancelBtn)
+    appOrderCancelBtn.addEventListener('click', appCancelOrder);
+  if (appInstalledTab)
+    appInstalledTab.addEventListener('click', () =>
+      appManagerSelectPanel('installed'),
+    );
+  // A pending order belongs to the Installed list: settle it there first.
+  [
+    [appCatalogTab, 'catalog'],
+    [appCommunityTab, 'community'],
+  ].forEach(([tab, name]) => {
+    if (tab)
+      tab.addEventListener('click', () => {
+        if (appOrderIsDirty()) {
+          if (appOrderNotice) appOrderNotice.hidden = false;
+          return;
+        }
+        appManagerSelectPanel(name);
+      });
+  });
   appBuildTable();
+  appResetOrder();
+  appUpdateManagerSummary();
 
-  // Refresh the app list on entering the Apps view; release serial on leaving.
+  // Refresh the app list on entering the Apps view once the shared runtime
+  // connection requested by the Studio shell is ready.
   window.addEventListener('uvstudio:toolviewchange', (event) => {
     const nextView = event.detail?.view || 'flash';
     if (nextView === 'apps') {
       updateAppButtons();
-      void appRefreshFlow();
+      if (port && toolsSerial.isOwner()) void appRefreshFlow();
     }
   });
   window.addEventListener('uvstudio:appcatalogversions', (event) => {
@@ -4385,6 +6096,15 @@
     );
     appRefreshUpdateIndicators();
   });
+  window.addEventListener('uvstudio:appcommunity', (event) => {
+    const apps = Array.isArray(event.detail?.apps) ? event.detail.apps : [];
+    appCommunityApps = new Map(
+      apps
+        .filter((app) => app && app.name && app.version && app.url)
+        .map((app) => [appCatalogKey(app.name), app]),
+    );
+    appRefreshUpdateIndicators();
+  });
   window.addEventListener('uvstudio:appcatalogcompatibility', (event) => {
     if (
       String(event.detail?.firmwareVersion || '') !== appCurrentFirmwareVersion
@@ -4392,6 +6112,11 @@
       return;
     const apps = Array.isArray(event.detail?.apps) ? event.detail.apps : [];
     appCompatibilityKnown = event.detail?.found === true;
+    if (appManagerCompatibility) {
+      appManagerCompatibility.textContent = appCompatibilityKnown
+        ? t('appManagerCatalogCompatible')
+        : t('appManagerCatalogUnavailable');
+    }
     appCompatibleVersions = new Map(
       apps
         .filter((app) => app && app.name && app.version)
@@ -4401,9 +6126,9 @@
   });
   window.addEventListener('uvstudio:languagechange', () => {
     if (appsTableBody)
-      appsTableBody.querySelectorAll('.app-act-delete').forEach((b) => {
-        b.textContent = t('appDelete');
-      });
+      appsTableBody
+        .querySelectorAll('.app-act-delete')
+        .forEach((b) => setTableActionIcon(b, 'delete', t('appDelete')));
     if (appImage && appMetaEl)
       appMetaEl.textContent = t(
         'appDetected',
@@ -4411,7 +6136,9 @@
         appMeta.version || '?',
         (appMeta.codeSize / 1024).toFixed(1),
       );
+    appUpdateManagerSummary();
     appRefreshUpdateIndicators();
+    appUpdateOrderControls();
   });
 
   // ========== CAPABILITY CHECK ==========

@@ -8,118 +8,30 @@ const test = require('node:test');
 const vm = require('node:vm');
 
 const root = path.join(__dirname, '..');
+const readSource = (file) =>
+  fs.readFileSync(path.join(root, file), 'utf8').replace(/^ {2}/gm, '');
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-const studioVersionSource = fs.readFileSync(
-  path.join(root, 'js', 'studio-version.js'),
-  'utf8',
-);
-const flashSource = fs.readFileSync(path.join(root, 'js', 'flash.js'), 'utf8');
+const studioVersionSource = readSource('js/studio-version.js');
+const flashSource = readSource('js/flash.js');
+const viewerSource = readSource('js/k5viewer.js');
+const serialSource = readSource('js/studio-serial.js');
+const studioSource = readSource('js/studio.js');
+const appCatalogSource = readSource('js/app-catalog.js');
+const flashCatalogSource = readSource('js/flash-catalog.js');
 const studioCss = fs.readFileSync(path.join(root, 'css', 'studio.css'), 'utf8');
 const toolsCss = fs.readFileSync(path.join(root, 'css', 'tools.css'), 'utf8');
-
-// Extract indented (possibly async) function sources without depending on
-// exact blank-line formatting. Prettier may re-indent bodies, so match the
-// leading indentation of the declaration and capture until the matching
-// closing brace at that same indentation.
-function sliceFunction(source, name, { async = false } = {}) {
-  const pattern = new RegExp(
-    `(^|\\n)(?<indent>[ \\t]*)(?:async\\s+)?function\\s+${name}\\s*\\(`,
-  );
-  const match = pattern.exec(source);
-  assert.ok(match, `flash.js must define ${name}()`);
-  const indent = match.groups.indent;
-  const declStart = match.index + match[1].length;
-  const bodyOpen = source.indexOf('{', declStart);
-  assert.ok(bodyOpen > declStart, `${name}() must have a body`);
-  // Walk braces from the opening brace; strings/comments are simple enough
-  // in these helpers that a raw scan is sufficient for tests.
-  let depth = 0;
-  let inSingle = false;
-  let inDouble = false;
-  let inTemplate = false;
-  let inLineComment = false;
-  let inBlockComment = false;
-  let escaped = false;
-  for (let i = bodyOpen; i < source.length; i++) {
-    const ch = source[i];
-    const next = source[i + 1];
-    if (inLineComment) {
-      if (ch === '\n') inLineComment = false;
-      continue;
-    }
-    if (inBlockComment) {
-      if (ch === '*' && next === '/') {
-        inBlockComment = false;
-        i++;
-      }
-      continue;
-    }
-    if (inSingle) {
-      if (escaped) escaped = false;
-      else if (ch === '\\') escaped = true;
-      else if (ch === "'") inSingle = false;
-      continue;
-    }
-    if (inDouble) {
-      if (escaped) escaped = false;
-      else if (ch === '\\') escaped = true;
-      else if (ch === '"') inDouble = false;
-      continue;
-    }
-    if (inTemplate) {
-      if (escaped) escaped = false;
-      else if (ch === '\\') escaped = true;
-      else if (ch === '`') inTemplate = false;
-      continue;
-    }
-    if (ch === '/' && next === '/') {
-      inLineComment = true;
-      i++;
-      continue;
-    }
-    if (ch === '/' && next === '*') {
-      inBlockComment = true;
-      i++;
-      continue;
-    }
-    if (ch === "'") {
-      inSingle = true;
-      continue;
-    }
-    if (ch === '"') {
-      inDouble = true;
-      continue;
-    }
-    if (ch === '`') {
-      inTemplate = true;
-      continue;
-    }
-    if (ch === '{') depth++;
-    else if (ch === '}') {
-      depth--;
-      if (depth === 0) {
-        return source.slice(declStart, i + 1);
-      }
-    }
-  }
-  assert.fail(`${name}(): unterminated function body`);
-  return '';
-}
-
-function sliceFunctions(source, names) {
-  return names.map((name) => sliceFunction(source, name)).join('\n\n');
-}
-
-function sliceFunctionsAsync(source, names) {
-  // Async is only part of the declaration; the brace scanner is identical.
-  return sliceFunctions(source, names);
-}
+const coreCss = fs.readFileSync(path.join(root, 'css', 'core.css'), 'utf8');
 
 test('derives any multiboot edition from the canonical firmware filename', () => {
-  const fnSource = sliceFunction(flashSource, 'slotEditionFromFilename');
+  const start = flashSource.indexOf('function slotEditionFromFilename');
+  const end = flashSource.indexOf(
+    '\n\nfunction slotVersionFromFilename',
+    start,
+  );
+  assert.ok(start >= 0 && end > start);
   const context = {};
   vm.runInNewContext(
-    `${fnSource}; this.extractEdition = slotEditionFromFilename;`,
+    `${flashSource.slice(start, end)}; this.extractEdition = slotEditionFromFilename;`,
     context,
   );
 
@@ -136,14 +48,12 @@ test('derives any multiboot edition from the canonical firmware filename', () =>
 });
 
 test('accepts compact and dotted versions in multiboot firmware metadata', () => {
-  const fnSource = sliceFunctions(flashSource, [
-    'slotEditionFromFilename',
-    'slotVersionFromFilename',
-    'slotExtractMeta',
-  ]);
+  const start = flashSource.indexOf('function slotEditionFromFilename');
+  const end = flashSource.indexOf('\n\nfunction slotBuildHeader', start);
+  assert.ok(start >= 0 && end > start);
   const context = {};
   vm.runInNewContext(
-    `${fnSource}; this.extractMeta = slotExtractMeta;`,
+    `${flashSource.slice(start, end)}; this.extractMeta = slotExtractMeta;`,
     context,
   );
 
@@ -176,17 +86,16 @@ test('accepts compact and dotted versions in multiboot firmware metadata', () =>
 });
 
 test('stores a custom display name in the multiboot header', () => {
-  const fnSource = sliceFunctions(flashSource, [
-    'slotNormalizeName',
-    'slotBuildHeader',
-  ]);
+  const start = flashSource.indexOf('function slotNormalizeName');
+  const end = flashSource.indexOf('\n\nfunction slotParseHeader', start);
+  assert.ok(start >= 0 && end > start);
   const context = {};
   vm.runInNewContext(
     `const SLOT_HDR_SIZE = 64;
      const SLOT_MAGIC = 0x31424D46;
      const SLOT_HDR_VERSION = 1;
      const SLOT_FLAG_COMMITTED = 1;
-     ${fnSource};
+     ${flashSource.slice(start, end)};
      this.normalizeName = slotNormalizeName;
      this.buildHeader = slotBuildHeader;`,
     context,
@@ -223,42 +132,88 @@ test('keeps the public version and its cache key aligned', () => {
   );
 });
 
-test('reconnects Firmware Slots and refreshes them after the serial port returns', () => {
-  assert.ok(
-    flashSource.includes("navigator.serial.addEventListener('disconnect'"),
-  );
-  assert.ok(
-    flashSource.includes("navigator.serial.addEventListener('connect'"),
-  );
-  assert.ok(flashSource.includes('navigator.serial.getPorts()'));
-  assert.ok(flashSource.includes("toolsSerial.setState('reconnecting'"));
-  assert.ok(flashSource.includes('slotRefreshPending = true'));
-  assert.ok(flashSource.includes('void slotRefreshFlow()'));
-});
-
-test('loads the shared RF Log protocol before both consumers', () => {
-  const rf = html.indexOf('js/rf-log.js');
-  const viewer = html.indexOf('js/k5viewer.js');
-  const tools = html.indexOf('js/flash.js');
-  assert.ok(rf > 0 && rf < viewer && viewer < tools);
+test('keeps the F4HWN attribution and N7SIX adoption credit in UV Studio branding', () => {
+  assert.match(html, /<title>UV Studio by F4HWN · Adopted by N7SIX<\/title>/);
+  assert.match(html, /class="sb-sub">by F4HWN · Adopted by N7SIX<\/span>/);
+  assert.match(studioVersionSource, /by F4HWN · Adopted by N7SIX/);
+  assert.match(studioSource, /by F4HWN · Adopted by N7SIX/);
 });
 
 test('offers separate Official N7SIX and F4HWN firmware pickers', () => {
   const apex = html.indexOf('id="apexFirmwareCatalogSection"');
-  const firmware = html.indexOf('id="firmwareCatalogSection"');
-  assert.ok(apex > 0 && firmware > 0 && apex < firmware);
+  const f4hwn = html.indexOf('id="firmwareCatalogSection"');
+  assert.ok(apex > 0 && f4hwn > apex);
   assert.match(
     html,
     /id="apexFirmwareCatalogLabel"[^>]*data-i18n="official_n7six_firmware"/,
   );
   assert.match(html, /id="apexFirmwareCatalogSelect"/);
-  const catalogSource = fs.readFileSync(
-    path.join(root, 'js', 'flash-catalog.js'),
-    'utf8',
+  assert.match(
+    flashCatalogSource,
+    /const APEX_REPO = 'N7SIX\/UV-K1Series_ApeX-Edition_v7\.6\.0'/,
   );
-  assert.match(catalogSource, /apexFirmwareCatalogSelect/);
-  assert.match(catalogSource, /apexFirmwareCatalogSection/);
-  assert.match(catalogSource, /isApexOffered/);
+  assert.match(flashCatalogSource, /function fetchApexFiles\(\)/);
+  assert.match(flashCatalogSource, /function isApexOffered\(entry\)/);
+});
+
+test('translates the Official N7SIX firmware picker in every locale', () => {
+  const localeDir = path.join(root, 'locales');
+  const files = fs
+    .readdirSync(localeDir)
+    .filter((file) => /^[a-z]{2}\.js$/.test(file));
+  files.forEach((file) => {
+    const context = { window: {} };
+    vm.runInNewContext(
+      fs.readFileSync(path.join(localeDir, file), 'utf8'),
+      context,
+    );
+    const dictionary = context.window.UVSTUDIO_LOCALES[file.slice(0, 2)];
+    assert.match(dictionary.official_n7six_firmware, /N7SIX/, file);
+  });
+});
+
+test('reconnects every runtime tool and refreshes device inventories', () => {
+  assert.ok(
+    flashSource.includes("navigator.serial.addEventListener('disconnect'"),
+  );
+  assert.ok(
+    serialSource.includes('navigator.serial.addEventListener("connect"'),
+  );
+  assert.ok(serialSource.includes('navigator.serial.getPorts()'));
+  assert.ok(flashSource.includes("toolsSerial.setState('reconnecting'"));
+  assert.ok(
+    flashSource.includes(
+      "toolsRefreshPending = activeToolsView === 'slots' || activeToolsView === 'apps'",
+    ),
+  );
+  assert.ok(flashSource.includes('void slotRefreshFlow()'));
+  assert.ok(flashSource.includes('void appRefreshFlow()'));
+  assert.match(
+    flashSource,
+    /function toolsViewUsesRuntimeSerial[\s\S]*return view !== 'flash'/,
+  );
+  assert.match(flashSource, /UVStudioSerial\.createReconnectManager/);
+  assert.match(viewerSource, /UVStudioSerial\.createReconnectManager/);
+  assert.doesNotMatch(
+    flashSource,
+    /slotAutoReconnecting|reconnectSlotPort|handleSlotHardwareDisconnect/,
+  );
+  assert.match(
+    html,
+    /class="slots-list-toolbar">\s*<button[^>]+id="slotsRefreshBtn"[^>]+class="btn primary compact-toolbar-action slots-refresh"/,
+  );
+  assert.match(
+    toolsCss,
+    /\.compact-toolbar-action\s*\{[^}]*height:\s*32px[^}]*font-size:\s*11px/s,
+  );
+});
+
+test('loads the shared RF Log protocol before both consumers', () => {
+  const runtime = html.indexOf('js/runtime-protocol.js');
+  const rf = html.indexOf('js/rf-log.js');
+  const viewer = html.indexOf('js/k5viewer.js');
+  const tools = html.indexOf('js/flash.js');
+  assert.ok(runtime > 0 && runtime < rf && rf < viewer && viewer < tools);
 });
 
 test('loads the app catalog after the installer API and exposes both selectors', () => {
@@ -271,32 +226,19 @@ test('loads the app catalog after the installer API and exposes both selectors',
   assert.match(flashSource, /uvstudio:appselect/);
 });
 
-test('shows the N7SIX app picker above the F4HWN one', () => {
-  const apex = html.indexOf('id="apexAppCatalogSection"');
-  const main = html.indexOf('id="appCatalogSection"');
-  assert.ok(apex > 0 && main > apex);
-  assert.match(html, /id="apexAppCatalogVersionSelect"/);
-  assert.match(html, /id="apexAppCatalogSelect"/);
-  assert.match(html, /data-i18n="apex_app_catalog_label"/);
-  const appCatalogSource = fs.readFileSync(
-    path.join(root, 'js', 'app-catalog.js'),
-    'utf8',
-  );
-  assert.match(appCatalogSource, /apexAppCatalogSection/);
-  assert.match(appCatalogSource, /apexAppCatalogVersionSelect/);
-  assert.match(appCatalogSource, /APEX_APPS_PATH/);
-});
-
-test('exposes all 16 app slots in a bounded, scrollable table', () => {
-  assert.match(flashSource, /const APP_SLOT_COUNT = 16/);
-  assert.match(flashSource, /const APP_SLOT_LAST = APP_SLOT_COUNT - 1/);
+test('exposes 64 app slots for v7 while retaining earlier capacities', () => {
+  assert.match(flashSource, /const APP_SLOT_COUNT = 64/);
+  assert.match(flashSource, /const APP_V6_SLOT_COUNT = 48/);
+  assert.match(flashSource, /const APP_LEGACY_SLOT_COUNT = 16/);
+  assert.match(flashSource, /appCompareVersions\(version, '7\.0\.0'\) >= 0/);
+  assert.match(flashSource, /appCompareVersions\(version, '6\.1\.0'\) > 0/);
   assert.match(
     html,
     /class="slots-table-wrap apps-table-wrap">\s*<table class="slots-table" id="appsTable"/,
   );
   assert.match(
     toolsCss,
-    /\.apps-table-wrap\s*\{[^}]*height:\s*242px[^}]*overflow:\s*auto/s,
+    /\.apps-table-wrap\s*\{[^}]*max-height:\s*442px[^}]*overflow:\s*auto/s,
   );
   assert.match(
     toolsCss,
@@ -306,24 +248,345 @@ test('exposes all 16 app slots in a bounded, scrollable table', () => {
     toolsCss,
     /\.apps-table-wrap \.slots-table tbody tr\s*\{[^}]*height:\s*50px/s,
   );
+  assert.match(
+    toolsCss,
+    /\.apps-table-wrap \.slots-table tbody td\s*\{[^}]*height:\s*50px[^}]*padding-top:\s*8px/s,
+  );
+});
+
+test('provides a catalog and compact installed-app manager without new firmware commands', () => {
+  assert.match(html, /id="appInstalledTab"/);
+  assert.match(html, /id="appCatalogTab"/);
+  assert.doesNotMatch(html, /id="appShowEmptySlots"/);
+  assert.match(
+    html,
+    /class="btn primary compact-toolbar-action app-refresh-button" id="appRefreshBtn"[^>]+data-i18n="appsRefresh"/,
+  );
+  assert.match(
+    html,
+    /class="btn danger compact-toolbar-action" id="appDeleteAllBtn"[^>]+data-i18n="appDeleteAll"[^>]+disabled/,
+  );
+  assert.match(
+    html,
+    /id="appDeleteAllModal"[^>]+role="dialog"[^>]+aria-modal="true"/,
+  );
+  assert.ok(
+    html.indexOf('id="appRenumberBtn"') < html.indexOf('id="appRefreshBtn"'),
+  );
+  assert.ok(
+    html.indexOf('id="appOrderActions"') < html.indexOf('id="appRefreshBtn"'),
+  );
+  assert.doesNotMatch(html, /id="appEmptyCatalogBtn"/);
+  assert.match(html, /id="appCatalogSearch"/);
+  assert.ok(
+    html.indexOf('id="appCatalogLocalBuild"') <
+      html.indexOf('id="appCatalogVersionSelect"'),
+  );
+  assert.match(html, /id="appCatalogLocalBuildButton">Custom<\/button>/);
+  assert.doesNotMatch(html, /id="appCatalogLocalBuildButton"[^>]+data-i18n/);
+  assert.match(
+    html,
+    /id="appCatalogLocalBuildChange"[^>]+data-i18n="appLocalBuildChange"[^>]+hidden/,
+  );
+  assert.match(
+    appCatalogSource,
+    /localBuildButton\.textContent = t\('appLocalBuild'\)/,
+  );
+  assert.doesNotMatch(appCatalogSource, /t\('appLocalBuildFolder'/);
+  assert.match(html, /id="appCategoryFilters"/);
+  assert.match(html, /data-category="other"[^>]*hidden/);
+  assert.match(appCatalogSource, /APP_DETAILS\[id\] \|\| \['other'/);
+  assert.match(appCatalogSource, /indexedDB\.open\(LOCAL_DIRECTORY_DB, 1\)/);
+  assert.match(appCatalogSource, /store\.put\(handle, LOCAL_DIRECTORY_KEY\)/);
+  assert.doesNotMatch(appCatalogSource, /versions\.push\(LOCAL_VERSION\)/);
+  assert.match(
+    appCatalogSource,
+    /localBuildChangeButton\.addEventListener\('click'.*scanLocalBuild\(true\)/s,
+  );
+  assert.match(flashSource, /appSelectFirstEmptySlot/);
+  assert.match(flashSource, /appSlotStatuses\.size !== appActiveSlotCount/);
+  assert.match(flashSource, /detail: \{ ready, installed, free, apps \}/);
+  assert.doesNotMatch(flashSource, /appEmptyCatalogBtn/);
+  assert.match(flashSource, /updateAppFromURL,/);
+  assert.match(flashSource, /deleteAppSlot,/);
+  assert.match(flashSource, /async function appDeleteAllFlow\(\)/);
+  assert.match(flashSource, /await confirmAppDeleteAll\(slots\.length\)/);
+  assert.match(
+    flashSource,
+    /for \(let index = 0; index < slots\.length; index\+\+\)/,
+  );
+  assert.match(
+    flashSource,
+    /appDeleteAllBtn\.disabled = !serialSupported \|\| busy \|\| orderDirty \|\| !installed/,
+  );
+  assert.match(
+    flashSource,
+    /class="slot-size"><span class="slot-code-size">—<\/span><span class="slot-asset-size"><\/span>/,
+  );
+  assert.match(
+    flashSource,
+    /appSizeCode.*appFormatBytes\(Number\(row\.dataset\.appCodeSize\)\)/s,
+  );
+  assert.match(
+    flashSource,
+    /appSizeAssets.*appFormatBytes\(Number\(row\.dataset\.appAssetSize\)\)/s,
+  );
+  assert.match(appCatalogSource, /catalogAppState\(installed, metadata\)/);
+  assert.match(
+    appCatalogSource,
+    /` \(\+\$\{formatByteSize\(metadata\.assetSize\)\}\)`/,
+  );
+  assert.match(
+    appCatalogSource,
+    /appSizeAssets.*formatByteSize\(metadata\.assetSize\)/s,
+  );
+  assert.match(
+    toolsCss,
+    /\.app-catalog-meta\s*\{[^}]*height:\s*14px[^}]*white-space:\s*nowrap/s,
+  );
+  assert.match(appCatalogSource, /flash\.updateAppFromURL\(installed\.slot/);
+  assert.match(appCatalogSource, /flash\.deleteAppSlot\(installed\.slot\)/);
+  assert.match(
+    appCatalogSource,
+    /className = 'btn app-catalog-action app-catalog-install'/,
+  );
+  assert.match(
+    appCatalogSource,
+    /setCatalogActionContent\(install, 'install', t\('appInstallBtn'\), actionSizers\)/,
+  );
+  assert.match(
+    appCatalogSource,
+    /setCatalogActionContent\(update, 'update', `\$\{t\('appUpdateShort'\)\} → \$\{updateVersion\}`, actionSizers\)/,
+  );
+  assert.match(
+    appCatalogSource,
+    /const actionSizers = \[\s*t\('appInstallBtn'\),\s*t\('appDelete'\),\s*`\$\{t\('appUpdateShort'\)\} → \$\{longestVersion\}`/,
+  );
+  assert.match(
+    toolsCss,
+    /\.app-catalog-action-sizer\s*\{\s*visibility:\s*hidden/,
+  );
+  assert.match(
+    appCatalogSource,
+    /update\.title = t\('appUpdateAction', updateVersion\)/,
+  );
+  assert.match(
+    appCatalogSource,
+    /progressHost\(card\)\.appendChild\(createCatalogProgress\(progressState\.shown\)\)/,
+  );
+  assert.doesNotMatch(appCatalogSource, /primarySlot|secondarySlot/);
+  assert.match(
+    appCatalogSource,
+    /setCatalogActionContent\(remove, 'delete', t\('appDelete'\), actionSizers\)/,
+  );
+  assert.match(
+    html,
+    /id="appOrderNotice"[^>]*hidden data-i18n="appOrderApplyFirst"/,
+  );
+  assert.ok(
+    html.indexOf('id="appCatalogTab"') < html.indexOf('id="appOrderNotice"'),
+  );
+  assert.ok(
+    html.indexOf('id="appOrderNotice"') <
+      html.indexOf('id="appInstalledPanel"'),
+  );
+  assert.match(toolsCss, /\.app-manager-tabs-row\s*\{[^}]*display:\s*flex/);
+  assert.match(
+    flashSource,
+    /\[\[appCatalogTab, 'catalog'\], \[appCommunityTab, 'community'\]\]\.forEach\(\(\[tab, name\]\) => \{\s*if \(tab\) tab\.addEventListener\('click', \(\) => \{\s*if \(appOrderIsDirty\(\)\) \{\s*if \(appOrderNotice\) appOrderNotice\.hidden = false;\s*return;/,
+  );
+  assert.match(
+    flashSource,
+    /if \(appOrderNotice && !dirty\) appOrderNotice\.hidden = true/,
+  );
+  assert.match(
+    flashSource,
+    /async function installAppFromURL\([^)]*\) \{\s*if \(appOrderIsDirty\(\)\)/,
+  );
+  assert.doesNotMatch(appCatalogSource, /orderPending|uvstudio:apporder/);
+  assert.match(
+    toolsCss,
+    /\.app-catalog-card \.app-catalog-action svg\s*\{[^}]*width:\s*17px[^}]*stroke-width:\s*2/s,
+  );
+  assert.match(
+    toolsCss,
+    /\.app-catalog-progress\s*\{[^}]*position:\s*absolute[^}]*right:\s*14px[^}]*bottom:\s*6px[^}]*left:\s*14px/s,
+  );
+  assert.match(
+    toolsCss,
+    /\.app-catalog-card\s*\{[^}]*position:\s*relative[^}]*grid-template-columns:\s*38px minmax\(0, 1fr\) auto/s,
+  );
+  assert.match(
+    toolsCss,
+    /\.app-catalog-actions\s*\{[^}]*flex-direction:\s*column/s,
+  );
+  assert.match(
+    toolsCss,
+    /\.app-catalog-description\s*\{[^}]*height:\s*calc\(2 \* 1\.45em\)[^}]*-webkit-line-clamp:\s*2/s,
+  );
+  assert.doesNotMatch(
+    toolsCss,
+    /\.app-catalog-delete\.btn\s*\{[^}]*linear-gradient/s,
+  );
+  assert.match(
+    toolsCss,
+    /\.app-catalog-icon\s*\{[^}]*color:\s*var\(--text-secondary\)[^}]*background:\s*color-mix\(in oklab, currentColor 5%/s,
+  );
+  assert.match(
+    toolsCss,
+    /\.app-catalog-card\[data-category="radio"\]\s*\{\s*--app-category-color:\s*#3b82f6/,
+  );
+  assert.match(
+    toolsCss,
+    /\.app-catalog-card\[data-category="games"\]\s*\{\s*--app-category-color:\s*#f59e0b/,
+  );
+  assert.match(
+    toolsCss,
+    /\.app-catalog-tag\s*\{[^}]*color:\s*color-mix\(in oklab, var\(--app-category-color\) 78%[^}]*background:\s*color-mix\(in oklab, var\(--app-category-color\) 12%/s,
+  );
+  assert.match(
+    toolsCss,
+    /\.app-category\.btn\[data-category="radio"\]\s*\{\s*--app-category-color:\s*#3b82f6/,
+  );
+  assert.match(
+    toolsCss,
+    /\.app-category\.btn\.active\s*\{[^}]*var\(--app-category-color\) 84%[^}]*var\(--app-category-color\) 14%/s,
+  );
+  assert.match(
+    appCatalogSource,
+    /catalogTabEl\.addEventListener\('click', \(\) => \{ void load\(\); \}\);\s*if \(communityTabEl\) communityTabEl\.addEventListener\('click', openApps\);/,
+  );
+  assert.match(
+    toolsCss,
+    /\.apps-table-wrap tr\.app-slot-empty\s*\{\s*display:\s*none/,
+  );
+  assert.doesNotMatch(html, /id="appEmptyReadBtn"/);
+  assert.match(
+    flashSource,
+    /appRefreshBtn\.disabled = !serialSupported \|\| busy \|\| orderDirty/,
+  );
+  assert.match(
+    flashSource,
+    /appRefreshBtn\.addEventListener\('click', \(\) => \{ void appRefreshFlow\(\); \}\)/,
+  );
+  assert.doesNotMatch(flashSource, /MSG_APP_(?:ORDER|MOVE|SWAP)/);
+});
+
+test('reorders complete app slots through the existing raw flash protocol', () => {
+  assert.match(html, /id="appOrderActions" hidden/);
+  assert.match(html, /id="appOrderCancelBtn"[^>]+data-i18n="appOrderCancel"/);
+  assert.match(html, /id="appOrderApplyBtn"[^>]+data-i18n="appOrderApply"/);
+  assert.match(
+    html,
+    /id="appRenumberBtn"[^>]+data-i18n="appRenumber"[^>]+hidden/,
+  );
+  assert.match(flashSource, /const APP_REGION_BASE = 0x102000/);
+  assert.match(flashSource, /const APP_SLOT_STRIDE = 0x2000/);
+  assert.match(flashSource, /async function appReadSlotImage/);
+  assert.match(flashSource, /async function appWriteSlotImage/);
+  assert.match(flashSource, /function appOrderDragStart\(slot, event\)/);
+  assert.match(flashSource, /function appOrderDragOver\(targetSlot, event\)/);
+  assert.match(
+    flashSource,
+    /appOrderDraft\.splice\(appOrderDropIndex, 0, slot\)/,
+  );
+  assert.match(flashSource, /appsTableWrap\.scrollTop \+= 14/);
+  assert.match(flashSource, /row\.draggable = visible && !busy/);
+  assert.match(
+    flashSource,
+    /await readExternalFlashChunk\(base \+ offset, length, timestamp\)/,
+  );
+  assert.match(
+    flashSource,
+    /await eraseExternalFlashSector\(address, timestamp\)/,
+  );
+  assert.match(
+    flashSource,
+    /await appVerifySlotSector\(sector, address, timestamp, crcSupported\)/,
+  );
+  assert.match(
+    flashSource,
+    /for \(const target of validateTargets\)[\s\S]*await appValidate\(target\)/,
+  );
+  assert.ok(
+    flashSource.indexOf('images.set(slot, await appReadSlotImage') <
+      flashSource.indexOf('await appWriteSlotImage(move.target'),
+  );
+  assert.match(
+    toolsCss,
+    /\.app-order-actions\[hidden\]\s*\{\s*display:\s*none/,
+  );
+  assert.match(
+    toolsCss,
+    /\.app-renumber-button\[hidden\]\s*\{\s*display:\s*none/,
+  );
+  assert.match(toolsCss, /\.apps-table-wrap\s*\{[^}]*overflow-anchor:\s*none/s);
+  assert.match(toolsCss, /tr\.app-order-drop-before td\s*\{[^}]*box-shadow/s);
+  assert.match(html, /css\/tools\.css\?v=72/);
+  assert.match(html, /js\/flash\.js\?v=106/);
+  assert.doesNotMatch(flashSource, /app-order-(?:up|down)/);
+  assert.doesNotMatch(flashSource, /function appMoveInOrder/);
+
+  const start = flashSource.indexOf('function appOrderIsDirty');
+  const end = flashSource.indexOf('\n\nfunction appCanReorder', start);
+  const context = {};
+  vm.runInNewContext(
+    `${flashSource.slice(start, end)}; this.moves = appOrderMoves;`,
+    context,
+  );
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(context.moves([0, 4, 9], [4, 9, 0]))),
+    [
+      { target: 0, source: 4 },
+      { target: 4, source: 9 },
+      { target: 9, source: 0 },
+    ],
+  );
+
+  const renumberStart = flashSource.indexOf('function appRenumberMoves');
+  const renumberEnd = flashSource.indexOf(
+    '\n\nfunction appCanRenumber',
+    renumberStart,
+  );
+  const renumberContext = {};
+  vm.runInNewContext(
+    `${flashSource.slice(renumberStart, renumberEnd)}; this.moves = appRenumberMoves;`,
+    renumberContext,
+  );
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(renumberContext.moves([0, 1, 3, 4, 5]))),
+    [
+      { target: 2, source: 3 },
+      { target: 3, source: 4 },
+      { target: 4, source: 5 },
+      { target: 5, source: 2 },
+    ],
+  );
 });
 
 test('offers one-click updates for outdated multiboot firmware slots', () => {
   const slotsStart = html.indexOf('id="slotsTable"');
   const slotsEnd = html.indexOf('</table>', slotsStart);
   const slotsTable = html.slice(slotsStart, slotsEnd);
+  assert.doesNotMatch(slotsTable, /data-i18n="appColUpdate"/);
   assert.ok(
-    slotsTable.indexOf('data-i18n="slotColVersion"') <
-      slotsTable.indexOf('data-i18n="appColUpdate"'),
+    slotsTable.indexOf('data-i18n="slotColState"') <
+      slotsTable.indexOf('data-i18n="appColActions"'),
   );
-  assert.ok(
-    slotsTable.indexOf('data-i18n="appColUpdate"') <
-      slotsTable.indexOf('data-i18n="slotColSize"'),
-  );
-  assert.match(flashSource, /className = 'slot-update-button'/);
   assert.match(
     flashSource,
-    /class="slot-update-cell"><span class="update-current" hidden/,
+    /className = 'btn table-icon-action is-primary slot-update-button'/,
+  );
+  assert.match(flashSource, /eraseBtn\.hidden = true/);
+  assert.match(flashSource, /resetBtn\.hidden = true/);
+  assert.match(flashSource, /button\.hidden = !committed/);
+  assert.match(
+    flashSource,
+    /actions\.appendChild\(updateBtn\);\s*actions\.appendChild\(eraseBtn\);\s*actions\.appendChild\(resetBtn\);/,
+  );
+  assert.match(
+    flashSource,
+    /class="slot-actions"><div class="slot-actions-group"><\/div><\/td>/,
   );
   assert.match(flashSource, /async function slotUpdateFlow/);
   assert.match(flashSource, /await slotWriteFlow\(\)/);
@@ -332,13 +595,12 @@ test('offers one-click updates for outdated multiboot firmware slots', () => {
 });
 
 test('marks an installed app only when the catalog has a newer version', () => {
-  const fnSource = sliceFunctions(flashSource, [
-    'appVersionParts',
-    'appCompareVersions',
-  ]);
+  const start = flashSource.indexOf('function appVersionParts');
+  const end = flashSource.indexOf('\n\nfunction appCatalogKey', start);
+  assert.ok(start >= 0 && end > start);
   const context = {};
   vm.runInNewContext(
-    `${fnSource}; this.compare = appCompareVersions;`,
+    `${flashSource.slice(start, end)}; this.compare = appCompareVersions;`,
     context,
   );
 
@@ -347,29 +609,109 @@ test('marks an installed app only when the catalog has a newer version', () => {
   assert.ok(context.compare('2.0.0', '1.9.9') > 0);
   assert.equal(context.compare('development', '1.0.0'), null);
   assert.match(flashSource, /uvstudio:appcatalogversions/);
-  assert.match(flashSource, /className = 'app-update-button'/);
   assert.match(
     flashSource,
-    /class="app-update-cell"><span class="update-current" hidden/,
+    /className = 'btn table-icon-action is-primary app-update-button'/,
+  );
+  assert.match(
+    flashSource,
+    /className = 'btn table-icon-action is-danger app-act-delete'/,
+  );
+  assert.match(
+    flashSource,
+    /className = 'btn table-icon-action is-danger slot-act-erase'/,
+  );
+  assert.match(
+    flashSource,
+    /actions\.appendChild\(update\);\s*actions\.appendChild\(del\);/,
+  );
+  assert.match(
+    flashSource,
+    /setTableActionIcon\(button, 'update', detail, targetVersion\)/,
   );
   assert.match(flashSource, /await appInstallFlow\(\)/);
-  assert.ok(
-    html.indexOf('data-i18n="slotColVersion"') <
-      html.indexOf('data-i18n="appColUpdate"'),
+  const appsTable = html.slice(
+    html.indexOf('id="appsTable"'),
+    html.indexOf('</table>', html.indexOf('id="appsTable"')),
   );
+  assert.doesNotMatch(appsTable, /data-i18n="appColUpdate"/);
   assert.ok(
-    html.indexOf('data-i18n="appColUpdate"') <
-      html.indexOf('data-i18n="appColSize"'),
+    appsTable.indexOf('data-i18n="slotColState"') <
+      appsTable.indexOf('data-i18n="appColActions"'),
   );
   assert.match(toolsCss, /\.app-update-button/);
-  assert.match(toolsCss, /\.update-current/);
+  assert.match(
+    toolsCss,
+    /\.slot-actions\s*\{[^}]*width:\s*1%[^}]*text-align:\s*right/s,
+  );
+  assert.match(
+    toolsCss,
+    /\.slot-actions-group\s*\{[^}]*display:\s*inline-flex/s,
+  );
+  assert.match(
+    toolsCss,
+    /button\.table-icon-action\s*\{[^}]*width:\s*32px[^}]*background:\s*transparent/s,
+  );
+  assert.match(
+    toolsCss,
+    /button\.table-icon-action svg\s*\{[^}]*width:\s*20px[^}]*stroke-width:\s*1\.9/s,
+  );
+  assert.match(
+    toolsCss,
+    /button\.table-icon-action\.has-detail\s*\{[^}]*width:\s*auto[^}]*gap:\s*5px/s,
+  );
+  assert.match(
+    toolsCss,
+    /\.table-action-detail\s*\{[^}]*font-family:\s*var\(--font-mono\)/s,
+  );
+  assert.doesNotMatch(
+    toolsCss,
+    /table-icon-action\.is-(?:primary|danger)\s*\{\s*color:/,
+  );
+  assert.match(flashSource, /function tableActionVersionLabel\(version\)/);
+  assert.match(
+    flashSource,
+    /querySelector\('\.slot-version'\)\.textContent = committed \? \(tableActionVersionLabel\(hdr\.fwVersion\) \|\| '—'\)/,
+  );
+  const labelStart = flashSource.indexOf('function tableActionVersionLabel');
+  const labelEnd = flashSource.indexOf(
+    '\n\nfunction setTableActionIcon',
+    labelStart,
+  );
+  const labelContext = {};
+  vm.runInNewContext(
+    `${flashSource.slice(labelStart, labelEnd)}; this.label = tableActionVersionLabel;`,
+    labelContext,
+  );
+  assert.equal(labelContext.label('v1.8'), '1.8');
+  assert.equal(labelContext.label('1.8'), '1.8');
+  assert.match(
+    flashSource,
+    /update: '<svg class="table-action-update-icon"[^']+M21 12a9 9 0 1 1-3-6\.7[^']+M21 4v6h-6/,
+  );
+  assert.match(
+    toolsCss,
+    /svg\.table-action-update-icon,\s*[^\{]*svg\.table-action-reset-icon\s*\{[^}]*stroke-width:\s*2/s,
+  );
+  assert.match(
+    flashSource,
+    /reset: '<svg class="table-action-reset-icon"[^']+m7 21-4\.3-4\.3[^']+m5 11 9 9[^']+M7 21h15/,
+  );
+  assert.match(flashSource, /delete: '<svg[^']+<path d="M3 6h18"/);
+  assert.doesNotMatch(flashSource, /class="(?:app|slot)-update-cell"/);
 });
 
 test('checks installed apps against the detected Labs catalog', () => {
-  const fnSource = sliceFunction(flashSource, 'appFirmwareVersionFromName');
-  const context = {};
+  const start = flashSource.indexOf('function appVersionParts');
+  const end = flashSource.indexOf('\n\nconst appFileInput', start);
+  assert.ok(start >= 0 && end > start);
+  const context = {
+    APP_SLOT_COUNT: 64,
+    APP_V6_SLOT_COUNT: 48,
+    APP_LEGACY_SLOT_COUNT: 16,
+  };
   vm.runInNewContext(
-    `${fnSource}; this.extract = appFirmwareVersionFromName;`,
+    `${flashSource.slice(start, end)}; this.extract = appFirmwareVersionFromName; this.slotCount = appSlotCountForFirmware;`,
     context,
   );
 
@@ -377,13 +719,23 @@ test('checks installed apps against the detected Labs catalog', () => {
   assert.equal(context.extract('F4HWN Labs v6.0'), '6.0.0');
   assert.equal(context.extract('F4HWN v6.1.0 beta'), '6.1.0');
   assert.equal(context.extract('unknown firmware'), '');
+  assert.equal(context.slotCount('F4HWN Labs v6.1.0'), 16);
+  assert.equal(context.slotCount('F4HWN Fusion v6.1.1'), 48);
+  assert.equal(context.slotCount('F4HWN Fusion v6.2.0'), 48);
+  assert.equal(context.slotCount('F4HWN Fusion v6.99.0'), 48);
+  assert.equal(context.slotCount('F4HWN Fusion v7.0'), 64);
+  assert.equal(context.slotCount('F4HWN Fusion v7.0.0'), 64);
+  assert.equal(context.slotCount('F4HWN Fusion v7.1.0'), 64);
+  assert.equal(context.slotCount('unknown firmware'), 16);
   assert.match(flashSource, /uvstudio:appfirmwareversion/);
   assert.match(flashSource, /uvstudio:appcatalogcompatibility/);
   assert.match(flashSource, /appStateFirmwareMismatch/);
 });
 
 test('downloads a catalog app and forwards its filename to the installer', async () => {
-  const fnSource = sliceFunction(flashSource, 'loadAppFromURL');
+  const start = flashSource.indexOf('async function loadAppFromURL');
+  const end = flashSource.indexOf('\n\nif (appFileInput)', start);
+  assert.ok(start >= 0 && end > start);
   const expected = Uint8Array.from([0x46, 0x41, 0x50, 0x31]);
   const loaded = {};
   const context = {
@@ -411,7 +763,10 @@ test('downloads a catalog app and forwards its filename to the installer', async
     log() {},
     t: (key) => key,
   };
-  vm.runInNewContext(`${fnSource}; this.load = loadAppFromURL;`, context);
+  vm.runInNewContext(
+    `${flashSource.slice(start, end)}; this.load = loadAppFromURL;`,
+    context,
+  );
 
   const loadedOk = await context.load(
     'https://example.test/archive/apps/v6.0.0/Beacon.app',
@@ -434,13 +789,9 @@ test('loads resilient preferences before i18n and application consumers', () => 
 
 test('keeps live-view-only controls out of the RF Log toolbar', () => {
   ['keyboardToggleBtn', 'keyboardDetachBtn', 'helpBtn'].forEach((id) => {
-    // Prettier puts class and id on separate lines; allow any attrs between.
     assert.match(
       html,
-      new RegExp(
-        `<button[^>]*class="[^"]*viewer-live-only[^"]*"[^>]*id="${id}"|` +
-          `<button[^>]*id="${id}"[^>]*class="[^"]*viewer-live-only[^"]*"`,
-      ),
+      new RegExp(`class="[^"]*viewer-live-only[^"]*" id="${id}"`),
     );
   });
   assert.match(html, /id="pane-viewer" data-viewer-mode="live"/);
@@ -501,30 +852,573 @@ test('keeps Labs-only tools together in the sidebar', () => {
   );
   assert.match(
     html,
-    /class="nav-item nav-item-labs"[\s\S]+?data-route="apps"[\s\S]+?data-name="Apps \(Labs only\)"/,
+    /class="nav-item nav-item-labs" data-route="apps"[^>]+data-name="Apps \(Labs only\)"/,
   );
   assert.match(
     html,
-    /class="nav-item nav-item-labs"[\s\S]+?data-route="external-flash"[\s\S]+?data-name="External Flash \(Labs only\)"/,
+    /class="nav-item nav-item-labs" data-route="external-flash"[^>]+data-name="External Flash \(Labs only\)"/,
   );
   assert.match(
     html,
-    /class="nav-item nav-item-labs"[\s\S]+?data-route="factory-reset"[\s\S]+?data-name="Factory Reset \(Labs only\)"/,
+    /class="nav-item nav-item-labs" data-route="factory-reset"[^>]+data-name="Factory Reset \(Labs only\)"/,
   );
   assert.equal(
     (html.match(/class="tag" data-i18n="studio_nav_labs_only"/g) || []).length,
     3,
   );
+  assert.equal(
+    (html.match(/class="tag" data-i18n="studio_nav_labs_only" hidden/g) || [])
+      .length,
+    3,
+  );
   assert.match(studioCss, /\.nav-item-labs\s*\{[^}]*gap:\s*8px/);
   assert.match(studioCss, /\.nav-item-labs \.tag\s*\{[^}]*margin-left:\s*auto/);
   assert.match(studioCss, /\.nav-item-labs \.tag\s*\{[^}]*margin-right:\s*0/);
+  assert.match(
+    studioCss,
+    /\.nav-item:disabled > svg,\s*\.nav-item:disabled \.nav-item-label\s*\{[^}]*opacity:\s*0\.5/s,
+  );
+  assert.match(
+    studioCss,
+    /\.nav-item:disabled \.tag\s*\{[^}]*opacity:\s*1[^}]*filter:\s*none/s,
+  );
+  assert.match(html, /css\/studio\.css\?v=28/);
+});
+
+test('adapts tool badges to the connected firmware generation', () => {
+  const start = flashSource.indexOf('function firmwareUsesServiceNavigation');
+  const end = flashSource.indexOf(
+    '\n\n// ========== UI UPDATE ==========',
+    start,
+  );
+  assert.ok(start >= 0 && end > start);
+
+  const makeTag = () => ({
+    hidden: false,
+    textContent: '',
+    setAttribute(name, value) {
+      this[name] = value;
+    },
+  });
+  const makeItem = () => ({
+    dataset: {},
+    title: '',
+    setAttribute(name, value) {
+      this[name] = value;
+    },
+    removeAttribute(name) {
+      delete this[name];
+    },
+  });
+  const events = [];
+  const context = {
+    connectedFirmwareName: '',
+    firmwareNavigationConnected: false,
+    navigationCapabilities: null,
+    appsNavigationTag: makeTag(),
+    externalFlashNavigationTag: makeTag(),
+    factoryResetNavigationTag: makeTag(),
+    appsNavigationItem: makeItem(),
+    externalFlashNavigationItem: makeItem(),
+    factoryResetNavigationItem: makeItem(),
+    t(key) {
+      return key;
+    },
+    CustomEvent: class CustomEvent {
+      constructor(type) {
+        this.type = type;
+      }
+    },
+    window: {
+      dispatchEvent(event) {
+        events.push(event.type);
+      },
+    },
+  };
+  vm.runInNewContext(
+    `${flashSource.slice(start, end)}; this.applyPolicy = applyFirmwareNavigationPolicy; this.applyCapabilities = applyNavigationCapabilities; this.isService = firmwareUsesServiceNavigation; this.keepProfile = shouldKeepFirmwareNavigationProfile; this.clearOnSerialState = shouldClearFirmwareNavigationOnSerialState;`,
+    context,
+  );
+
+  assert.equal(context.isService('F4HWN v6.9.9'), false);
+  assert.equal(context.isService('F4HWN v50'), false);
+  assert.equal(context.isService('F4HWN v7.0.0'), true);
+  assert.equal(context.isService('F4HWN v70'), true);
+  assert.equal(context.isService('unknown'), false);
+  assert.equal(
+    context.keepProfile({ reason: 'navigation', nextOwner: 'viewer' }),
+    true,
+  );
+  assert.equal(
+    context.keepProfile({ reason: 'handoff', nextOwner: 'tools' }),
+    true,
+  );
+  assert.equal(
+    context.keepProfile({ reason: 'navigation', nextOwner: null }),
+    false,
+  );
+  assert.equal(
+    context.keepProfile({ reason: 'user', nextOwner: 'viewer' }),
+    false,
+  );
+  assert.equal(
+    context.clearOnSerialState({
+      state: 'disconnected',
+      previousOwner: 'viewer',
+      reason: 'navigation',
+      nextOwner: 'tools',
+    }),
+    false,
+  );
+  assert.equal(
+    context.clearOnSerialState({
+      state: 'disconnected',
+      previousOwner: 'viewer',
+      reason: 'user',
+    }),
+    true,
+  );
+  assert.equal(
+    context.clearOnSerialState({
+      state: 'reconnecting',
+      owner: 'viewer',
+      reason: 'hardware-disconnect',
+    }),
+    true,
+  );
+
+  context.applyPolicy('', false);
+  assert.equal(context.appsNavigationTag.hidden, true);
+  assert.equal(context.externalFlashNavigationTag.hidden, true);
+  assert.equal(context.factoryResetNavigationTag.hidden, true);
+
+  context.applyPolicy('F4HWN v6.9.9');
+  assert.equal(context.appsNavigationTag.hidden, true);
+  assert.equal(context.externalFlashNavigationTag.hidden, true);
+  assert.equal(context.factoryResetNavigationTag.hidden, true);
+  context.applyCapabilities({ apps: true, externalFlash: true });
+  assert.equal(context.appsNavigationItem.dataset.capabilityKnown, 'true');
+  assert.equal(
+    context.externalFlashNavigationItem.dataset.capabilityKnown,
+    'true',
+  );
+  assert.equal(
+    context.factoryResetNavigationItem.dataset.capabilityKnown,
+    'true',
+  );
+  assert.equal(
+    context.appsNavigationItem.dataset.capabilityDisabled,
+    undefined,
+  );
+  assert.equal(
+    context.externalFlashNavigationItem.dataset.capabilityDisabled,
+    undefined,
+  );
+  assert.equal(
+    context.factoryResetNavigationItem.dataset.capabilityDisabled,
+    undefined,
+  );
+  assert.equal(context.appsNavigationTag.hidden, true);
+  assert.equal(context.externalFlashNavigationTag.hidden, true);
+  assert.equal(context.factoryResetNavigationTag.hidden, true);
+  context.applyCapabilities({ apps: true, externalFlash: false });
+  assert.equal(context.appsNavigationItem.dataset.capabilityDisabled, 'true');
+  assert.equal(
+    context.externalFlashNavigationItem.dataset.capabilityDisabled,
+    'true',
+  );
+  assert.equal(
+    context.factoryResetNavigationItem.dataset.capabilityDisabled,
+    'true',
+  );
+  assert.equal(context.appsNavigationTag.hidden, false);
+  assert.equal(context.appsNavigationTag['data-i18n'], 'studio_nav_labs_only');
+  assert.equal(context.externalFlashNavigationTag.hidden, false);
+  assert.equal(
+    context.externalFlashNavigationTag['data-i18n'],
+    'studio_nav_labs_only',
+  );
+  assert.equal(context.factoryResetNavigationTag.hidden, false);
+  assert.equal(
+    context.factoryResetNavigationTag['data-i18n'],
+    'studio_nav_labs_only',
+  );
+  context.applyCapabilities({ apps: false, externalFlash: true });
+  assert.equal(context.appsNavigationItem.dataset.capabilityDisabled, 'true');
+  assert.equal(
+    context.externalFlashNavigationItem.dataset.capabilityDisabled,
+    'true',
+  );
+  assert.equal(
+    context.factoryResetNavigationItem.dataset.capabilityDisabled,
+    'true',
+  );
+  context.applyCapabilities(null);
+  assert.equal(context.appsNavigationItem.dataset.capabilityKnown, 'false');
+  assert.equal(
+    context.externalFlashNavigationItem.dataset.capabilityKnown,
+    'false',
+  );
+  assert.equal(
+    context.factoryResetNavigationItem.dataset.capabilityKnown,
+    'false',
+  );
+  events.length = 0;
+
+  context.applyPolicy('F4HWN v7.0.0');
+  assert.equal(context.appsNavigationTag.hidden, true);
+  assert.equal(context.externalFlashNavigationTag.hidden, true);
+  assert.equal(context.factoryResetNavigationTag.hidden, true);
+  context.applyCapabilities({ apps: true, externalFlash: false });
+  assert.equal(
+    context.appsNavigationItem.dataset.capabilityDisabled,
+    undefined,
+  );
+  assert.equal(context.appsNavigationTag.hidden, true);
+  assert.equal(
+    context.externalFlashNavigationItem.dataset.capabilityDisabled,
+    'true',
+  );
+  assert.equal(
+    context.factoryResetNavigationItem.dataset.capabilityDisabled,
+    'true',
+  );
+  assert.equal(context.externalFlashNavigationTag.hidden, false);
+  assert.equal(
+    context.externalFlashNavigationTag['data-i18n'],
+    'studio_nav_service_only',
+  );
+  assert.equal(context.factoryResetNavigationTag.hidden, false);
+  assert.equal(
+    context.factoryResetNavigationTag['data-i18n'],
+    'studio_nav_service_only',
+  );
+  assert.equal(
+    context.externalFlashNavigationItem['data-i18n-title'],
+    'studio_nav_unavailable_edition',
+  );
+  assert.deepEqual(events, ['uvstudio:navigationcapabilitieschange']);
+  context.applyCapabilities({ apps: false, externalFlash: true });
+  assert.equal(context.appsNavigationItem.dataset.capabilityDisabled, 'true');
+  assert.equal(context.appsNavigationTag.hidden, false);
+  assert.equal(
+    context.appsNavigationTag['data-i18n'],
+    'studio_nav_fusion_only',
+  );
+  assert.equal(
+    context.externalFlashNavigationItem.dataset.capabilityDisabled,
+    undefined,
+  );
+  assert.equal(context.externalFlashNavigationTag.hidden, true);
+  assert.equal(context.factoryResetNavigationTag.hidden, true);
+  context.applyCapabilities(null);
+  assert.equal(
+    context.externalFlashNavigationItem.dataset.capabilityDisabled,
+    undefined,
+  );
+  assert.equal(
+    context.factoryResetNavigationItem.dataset.capabilityDisabled,
+    undefined,
+  );
+  assert.equal(context.appsNavigationTag.hidden, true);
+  assert.equal(context.externalFlashNavigationTag.hidden, true);
+  assert.equal(context.factoryResetNavigationTag.hidden, true);
+  assert.match(flashSource, /await requestDeviceInfo\(\{ timeoutMs: 1500 \}\)/);
+  assert.match(
+    flashSource,
+    /const name = logDeviceInfo\(resp\.data\);\s+applyFirmwareNavigationPolicy\(name\)/,
+  );
+  assert.match(
+    flashSource,
+    /appInfo\(APP_SLOT_FIRST, NAVIGATION_PROBE_TIMEOUT_MS\)/,
+  );
+  assert.match(
+    flashSource,
+    /deviceInfo\.timestamp, NAVIGATION_PROBE_TIMEOUT_MS, 0/,
+  );
+  assert.match(studioSource, /item\.dataset\.capabilityDisabled === "true"/);
+  assert.match(studioSource, /uvstudio:navigationcapabilitieschange/);
+
+  const localeDir = path.join(root, 'locales');
+  fs.readdirSync(localeDir)
+    .filter((file) => /^[a-z]{2}\.js$/.test(file))
+    .forEach((file) => {
+      const localeContext = { window: {} };
+      vm.runInNewContext(
+        fs.readFileSync(path.join(localeDir, file), 'utf8'),
+        localeContext,
+      );
+      const dictionary =
+        localeContext.window.UVSTUDIO_LOCALES[file.slice(0, 2)];
+      assert.ok(
+        dictionary.studio_nav_service_only,
+        `${file}: service-only badge`,
+      );
+      assert.ok(
+        dictionary.studio_nav_fusion_only,
+        `${file}: Fusion-only badge`,
+      );
+      assert.ok(
+        dictionary.studio_nav_unavailable_edition,
+        `${file}: unavailable edition title`,
+      );
+    });
+});
+
+test('detects the firmware profile when Live Viewer owns the serial port', () => {
+  assert.match(html, /js\/runtime-protocol\.js\?v=2/);
+  assert.match(html, /js\/k5viewer\.js\?v=40/);
+  assert.match(viewerSource, /PROFILE_MSG_DEVICE_INFO_REQUEST = 0x0514/);
+  assert.match(viewerSource, /PROFILE_MSG_APP_INFO = 0x0730/);
+  assert.match(viewerSource, /PROFILE_MSG_EXTERNAL_FLASH_READ = 0x0738/);
+  assert.match(
+    viewerSource,
+    /void detectViewerFirmwareProfile\(connectionSession\)/,
+  );
+  assert.match(
+    viewerSource,
+    /if \(reconnected\) \{\s*firstFrameAfterReconnect = false;\s*void detectViewerFirmwareProfile\(serialSession\)/,
+  );
+  assert.doesNotMatch(
+    viewerSource,
+    /setState\('connected', \{ reason: 'auto-reconnect' \}\);\s*void detectViewerFirmwareProfile/,
+  );
+  assert.match(
+    viewerSource,
+    /new CustomEvent\('uvstudio:firmwareprofiledetected'/,
+  );
+  assert.match(
+    flashSource,
+    /addEventListener\('uvstudio:firmwareprofiledetected'/,
+  );
+  assert.match(flashSource, /snapshot\?\.owner !== 'viewer'/);
+  assert.match(
+    flashSource,
+    /applyFirmwareNavigationPolicy\(detail\.name, true\)/,
+  );
+  assert.match(
+    flashSource,
+    /applyNavigationCapabilities\(detail\.capabilities\)/,
+  );
+});
+
+test('keeps edition-mismatched navigation disabled across serial state changes', () => {
+  const start = studioSource.indexOf('function applyNavigationDisabledState');
+  const end = studioSource.indexOf('\n\n    function applyBranding', start);
+  assert.ok(start >= 0 && end > start);
+
+  const makeItem = (unavailable, route) => {
+    const classes = new Set();
+    return {
+      dataset: Object.assign(
+        { route, capabilityKnown: 'true' },
+        unavailable ? { capabilityDisabled: 'true' } : {},
+      ),
+      disabled: false,
+      classList: {
+        toggle(name, force) {
+          if (force) classes.add(name);
+          else classes.delete(name);
+        },
+        contains(name) {
+          return classes.has(name);
+        },
+      },
+      setAttribute(name, value) {
+        this[name] = value;
+      },
+      removeAttribute(name) {
+        delete this[name];
+      },
+    };
+  };
+  const unavailable = makeItem(true, 'apps');
+  const current = makeItem(false, 'firmware-slots');
+  const other = makeItem(false, 'external-flash');
+  const context = {
+    items: [unavailable, current, other],
+    currentItem: current,
+    lastSerialSnapshot: { state: 'disconnected', operation: null },
+    editionSensitiveRoutes: new Set([
+      'apps',
+      'external-flash',
+      'factory-reset',
+    ]),
+    renderEditionContentState() {},
+  };
+  vm.runInNewContext(
+    `${studioSource.slice(start, end)}; this.applyDisabledState = applyNavigationDisabledState;`,
+    context,
+  );
+
+  context.applyDisabledState();
+  assert.equal(unavailable.disabled, true);
+  assert.equal(current.disabled, false);
+  assert.equal(other.disabled, false);
+  assert.equal(unavailable.classList.contains('is-edition-disconnected'), true);
+  assert.equal(current.classList.contains('is-edition-disconnected'), false);
+  assert.equal(other.classList.contains('is-edition-disconnected'), true);
+
+  context.lastSerialSnapshot = {
+    state: 'connected',
+    operation: { name: 'test' },
+  };
+  context.applyDisabledState();
+  assert.equal(unavailable.disabled, true);
+  assert.equal(current.disabled, false);
+  assert.equal(other.disabled, true);
+  assert.equal(
+    unavailable.classList.contains('is-edition-disconnected'),
+    false,
+  );
+  assert.equal(other.classList.contains('is-edition-disconnected'), false);
+
+  delete other.dataset.capabilityKnown;
+  context.lastSerialSnapshot = { state: 'connected', operation: null };
+  context.applyDisabledState();
+  assert.equal(other.disabled, false);
+  assert.equal(other.classList.contains('is-edition-disconnected'), true);
+});
+
+test('replaces stale edition-sensitive content with an inline connection state', () => {
+  assert.match(
+    html,
+    /id="edition-state-content"[^>]+role="status"[^>]+aria-live="polite"/,
+  );
+  assert.match(
+    toolsCss,
+    /#pane-tools \.edition-state\.active\s*\{[^}]*display:\s*flex/s,
+  );
+  assert.match(toolsCss, /#pane-tools\.showing-edition-state \.log-container/);
+
+  const start = studioSource.indexOf('function showToolView');
+  const end = studioSource.indexOf(
+    '\n\n    async function ensureRuntimeSerial',
+    start,
+  );
+  assert.ok(start >= 0 && end > start);
+
+  const makeClassList = (initial) => {
+    const classes = new Set(initial || []);
+    return {
+      add(name) {
+        classes.add(name);
+      },
+      remove(name) {
+        classes.delete(name);
+      },
+      toggle(name, force) {
+        if (force) classes.add(name);
+        else classes.delete(name);
+      },
+      contains(name) {
+        return classes.has(name);
+      },
+    };
+  };
+  const appsView = {
+    id: 'apps-content',
+    hidden: false,
+    classList: makeClassList(['active']),
+  };
+  const editionStateView = {
+    id: 'edition-state-content',
+    hidden: true,
+    dataset: {},
+    classList: makeClassList(),
+  };
+  const paneTools = { classList: makeClassList() };
+  const currentItem = {
+    dataset: {
+      app: 'tools',
+      route: 'apps',
+      toolView: 'apps',
+      capabilityKnown: 'true',
+      capabilityDisabled: 'true',
+    },
+  };
+  const context = {
+    toolViews: [appsView, editionStateView],
+    paneTools,
+    editionStateView,
+    editionStateTitle: { textContent: '' },
+    editionStateBody: { textContent: '' },
+    currentItem,
+    lastSerialSnapshot: { state: 'connected' },
+    editionSensitiveRoutes: new Set([
+      'apps',
+      'external-flash',
+      'factory-reset',
+    ]),
+    activateToolAction() {},
+    translate(key) {
+      return key;
+    },
+  };
+  vm.runInNewContext(
+    `${studioSource.slice(start, end)}; this.renderEditionState = renderEditionContentState;`,
+    context,
+  );
+
+  context.renderEditionState();
+  assert.equal(appsView.hidden, true);
+  assert.equal(editionStateView.hidden, false);
+  assert.equal(editionStateView.dataset.state, 'unavailable');
+  assert.equal(
+    context.editionStateTitle.textContent,
+    'studio_nav_unavailable_edition',
+  );
+  assert.equal(
+    context.editionStateBody.textContent,
+    'studio_edition_unavailable_body',
+  );
+  assert.equal(paneTools.classList.contains('showing-edition-state'), true);
+
+  context.lastSerialSnapshot = { state: 'disconnected' };
+  context.renderEditionState();
+  assert.equal(editionStateView.dataset.state, 'disconnected');
+  assert.equal(
+    context.editionStateTitle.textContent,
+    'studio_serial_disconnected',
+  );
+  assert.equal(context.editionStateBody.textContent, 'appManagerConnectHint');
+
+  delete currentItem.dataset.capabilityDisabled;
+  context.lastSerialSnapshot = { state: 'connected' };
+  context.renderEditionState();
+  assert.equal(appsView.hidden, false);
+  assert.equal(editionStateView.hidden, true);
+  assert.equal(paneTools.classList.contains('showing-edition-state'), false);
+
+  delete currentItem.dataset.capabilityKnown;
+  context.renderEditionState();
+  assert.equal(editionStateView.dataset.state, 'disconnected');
+  assert.equal(editionStateView.hidden, false);
+});
+
+test('keeps compact app and firmware controls usable on narrow screens', () => {
+  assert.match(
+    toolsCss,
+    /@media \(max-width:\s*640px\)[\s\S]*\.slots-table tbody tr[\s\S]*grid-template-areas/,
+  );
+  assert.match(
+    toolsCss,
+    /\.apps-table-wrap \.slots-table tbody tr\.app-slot-pending[^{]*\{\s*display:\s*none/,
+  );
+  assert.match(html, /<aside class="info-box" id="infoBox">/);
+  assert.doesNotMatch(
+    html,
+    /<summary[^>]*data-i18n="studio_about_compatibility"/,
+  );
+  assert.doesNotMatch(viewerSource, /showNotification\('app_loaded'/);
+  assert.match(
+    coreCss,
+    /\[data-theme="dark"\] \.btn\.danger\s*\{[^}]*background:[^}]*#dc2626/s,
+  );
 });
 
 test('orders logo actions from radio read to radio write', () => {
-  assert.match(
-    html,
-    /data-tool-view="logo"[\s\S]+?data-default-action="download"/,
-  );
+  assert.match(html, /data-tool-view="logo" data-default-action="download"/);
   const start = html.indexOf('id="logo-content"');
   const end = html.indexOf('id="external-flash-content"', start);
   const routes = [
@@ -551,11 +1445,15 @@ test('keeps generated-file downloads beside their read actions', () => {
 });
 
 test('keeps full external flash transfers responsive and retryable', () => {
-  const fnSource = sliceFunctionsAsync(flashSource, [
-    'waitForExternalFlashResponse',
-    'exchangeExternalFlashMessage',
-  ]);
-  const helpers = fnSource;
+  const start = flashSource.indexOf(
+    'async function waitForExternalFlashResponse',
+  );
+  const end = flashSource.indexOf(
+    '\n\n// Safety gate for External Flash',
+    start,
+  );
+  assert.ok(start >= 0 && end > start);
+  const helpers = flashSource.slice(start, end);
   assert.match(helpers, /await waitForSerialRead\(/);
   assert.doesNotMatch(helpers, /await sleep\(5\)/);
   assert.match(helpers, /retries = FLASH_COMMAND_RETRIES/);
@@ -565,11 +1463,11 @@ test('keeps full external flash transfers responsive and retryable', () => {
 });
 
 test('uses sector CRC32 to skip matching flash and accelerate verification', () => {
-  assert.match(flashSource, /const MSG_CRC_FLASH = 0x073[eE]/);
-  assert.match(flashSource, /const MSG_CRC_FLASH_RESP = 0x073[fF]/);
+  assert.match(flashSource, /const MSG_CRC_FLASH = 0x073E/);
+  assert.match(flashSource, /const MSG_CRC_FLASH_RESP = 0x073F/);
   assert.match(
     flashSource,
-    /await detectExternalFlashCrcSupport\(\s*devInfo\.timestamp,?/,
+    /await detectExternalFlashCrcSupport\(devInfo\.timestamp\)/,
   );
   assert.match(
     flashSource,
@@ -577,9 +1475,14 @@ test('uses sector CRC32 to skip matching flash and accelerate verification', () 
   );
   assert.match(flashSource, /await verifyExternalFlashSector\(/);
 
-  const fnSource = sliceFunction(flashSource, 'crc32Bytes');
+  const start = flashSource.indexOf('function crc32Bytes');
+  const end = flashSource.indexOf('\n}', start) + 2;
+  assert.ok(start >= 0 && end > start);
   const context = { Uint8Array };
-  vm.runInNewContext(`${fnSource}; this.crc32 = crc32Bytes;`, context);
+  vm.runInNewContext(
+    `${flashSource.slice(start, end)}; this.crc32 = crc32Bytes;`,
+    context,
+  );
   assert.equal(
     context.crc32(new Uint8Array(Buffer.from('123456789'))),
     0xcbf43926,
@@ -587,19 +1490,15 @@ test('uses sector CRC32 to skip matching flash and accelerate verification', () 
 });
 
 test('uses the shared modal UI to confirm external flash restoration', () => {
-  // Prettier breaks attributes across lines; match across newlines.
   assert.match(
     html,
-    /id="flashRestoreConfirmModal"[\s\S]+?role="dialog"[\s\S]+?aria-modal="true"/,
+    /id="flashRestoreConfirmModal"[^>]+role="dialog"[^>]+aria-modal="true"/,
   );
   assert.match(
     html,
-    /id="flashRestoreCancelBtn"[\s\S]+?data-i18n="flashRestoreCancel"/,
+    /id="flashRestoreCancelBtn"[^>]+data-i18n="flashRestoreCancel"/,
   );
-  assert.match(
-    html,
-    /class="btn danger"[\s\S]+?id="flashRestoreConfirmBtn"|id="flashRestoreConfirmBtn"[\s\S]+?class="btn danger"/,
-  );
+  assert.match(html, /class="btn danger" id="flashRestoreConfirmBtn"/);
   assert.match(flashSource, /await confirmExternalFlashRestore\(\)/);
   assert.doesNotMatch(
     flashSource,
@@ -610,33 +1509,30 @@ test('uses the shared modal UI to confirm external flash restoration', () => {
 test('provides verified two-stage factory restore workflows for UV-K1 and UV-K5 V3', () => {
   assert.match(
     html,
-    /class="nav-item nav-item-labs"[\s\S]+?data-route="factory-reset"[\s\S]+?data-tool-view="factory-reset"/,
+    /class="nav-item nav-item-labs"[^>]+data-route="factory-reset"[^>]+data-tool-view="factory-reset"/,
   );
   assert.match(
     html,
     /data-section-i18n="studio_nav_factory_reset"[\s\S]+data-i18n="studio_nav_labs_only"/,
   );
-  assert.match(
-    html,
-    /id="factory-reset-content"[\s\S]+?role="region"|role="region"[\s\S]+?id="factory-reset-content"/,
-  );
+  assert.match(html, /id="factory-reset-content"[^>]+role="region"/);
   assert.doesNotMatch(html, /id="factory-reset-tab"/);
   assert.match(html, /class="factory-reset-actions"/);
   assert.match(
     html,
-    /id="factoryResetK1Btn"[\s\S]+?data-factory-reset-target="k1"/,
+    /id="factoryResetK1Btn"[^>]+data-factory-reset-target="k1"/,
   );
   assert.match(
     html,
-    /id="factoryResetK5V3Btn"[\s\S]+?data-factory-reset-target="k5v3"/,
+    /id="factoryResetK5V3Btn"[^>]+data-factory-reset-target="k5v3"/,
   );
   assert.match(
     html,
-    /id="factoryResetModal"[\s\S]+?role="dialog"[\s\S]+?aria-modal="true"/,
+    /id="factoryResetModal"[^>]+role="dialog"[^>]+aria-modal="true"/,
   );
   assert.match(
     flashSource,
-    /factoryResetButtons\.forEach\(\(button\)\s*=>\s*\{\s*button\.disabled\s*=\s*busy;\s*\}\)/,
+    /factoryResetButtons\.forEach\(button => \{ button\.disabled = busy; \}\)/,
   );
   assert.match(flashSource, /showFactoryResetModal\('unsupported', target\)/);
   assert.match(flashSource, /const FACTORY_STATE_A = 0x100000/);
@@ -651,7 +1547,7 @@ test('provides verified two-stage factory restore workflows for UV-K1 and UV-K5 
   );
   assert.match(
     flashSource,
-    /for \(\s*let address = 0;\s*address < FLASH_TOTAL_SIZE;\s*address \+= FLASH_SECTOR_SIZE\s*\)/,
+    /for \(let address = 0; address < FLASH_TOTAL_SIZE; address \+= FLASH_SECTOR_SIZE\)/,
   );
   assert.match(flashSource, /address === FLASH_CALIBRATION_SECTOR/);
   assert.match(
@@ -660,20 +1556,20 @@ test('provides verified two-stage factory restore workflows for UV-K1 and UV-K5 
   );
   assert.match(
     flashSource,
-    /await restoreFactoryExternalFlash\(\s*factoryFlash,\s*devInfo\.timestamp,\s*crcSupported,?\s*\)/,
+    /await restoreFactoryExternalFlash\(factoryFlash, devInfo\.timestamp, crcSupported\)/,
   );
   assert.match(
     flashSource,
-    /fetchVerifiedBinary\(\s*target\.flashUrl,\s*FACTORY_FLASH_SIZE,\s*target\.flashSha256,?\s*\)/,
+    /fetchVerifiedBinary\(target\.flashUrl, FACTORY_FLASH_SIZE, target\.flashSha256\)/,
   );
   assert.match(
     flashSource,
-    /fetchVerifiedBinary\(\s*target\.firmwareUrl,\s*target\.firmwareSize,\s*target\.firmwareSha256,?\s*\)/,
+    /fetchVerifiedBinary\(target\.firmwareUrl, target\.firmwareSize, target\.firmwareSha256\)/,
   );
   assert.match(flashSource, /await showFactoryResetModal\('dfu'\)/);
   assert.match(
     flashSource,
-    /await flashFirmware\(\s*stockFirmware,\s*\{\s*count:\s*false,\s*offerChirpDriver:\s*false,?\s*\}\s*\)/,
+    /await flashFirmware\(stockFirmware, \{ count: false, offerChirpDriver: false \}\)/,
   );
   const factoryWorkflow = flashSource.slice(
     flashSource.indexOf('// ========== GUIDED FACTORY SOFTWARE RESTORE'),
@@ -831,11 +1727,14 @@ test('provides an equivalent on-demand file protocol fallback', () => {
 });
 
 test('retries an external flash command after transient response timeouts', async () => {
-  const fnSource = sliceFunctionsAsync(flashSource, [
-    'waitForExternalFlashResponse',
-    'exchangeExternalFlashMessage',
-    'readExternalFlashChunk',
-  ]);
+  const start = flashSource.indexOf(
+    'async function waitForExternalFlashResponse',
+  );
+  const end = flashSource.indexOf(
+    '\n\nasync function readExternalFlashChunk',
+    start,
+  );
+  assert.ok(start >= 0 && end > start);
   const context = { Uint8Array, DataView, performance: { now: () => 0 } };
   vm.runInNewContext(
     `const FLASH_COMMAND_RETRIES = 3;
@@ -854,7 +1753,7 @@ test('retries an external flash command after transient response timeouts', asyn
      }
      function fetchMessage(buffer) { return buffer.length ? buffer.shift() : null; }
      async function waitForSerialRead() { return false; }
-     ${fnSource};
+     ${flashSource.slice(start, end)};
      this.exchange = () => exchangeExternalFlashMessage(
        new Uint8Array(), 0x0739, 0x1234, 2000
      );
@@ -878,34 +1777,6 @@ test('keeps all local script and stylesheet resources resolvable', () => {
   });
 });
 
-test('translates the Official N7SIX picker label in every locale', () => {
-  const localeDir = path.join(root, 'locales');
-  const files = fs
-    .readdirSync(localeDir)
-    .filter((file) => /^[a-z]{2}\.js$/.test(file));
-  assert.match(html, /data-i18n="official_n7six_firmware"/);
-  files.forEach((file) => {
-    const context = { window: {} };
-    vm.runInNewContext(
-      fs.readFileSync(path.join(localeDir, file), 'utf8'),
-      context,
-    );
-    const dictionary = context.window.UVSTUDIO_LOCALES[file.slice(0, 2)];
-    assert.ok(
-      dictionary.official_n7six_firmware,
-      `${file}:official_n7six_firmware`,
-    );
-    assert.match(dictionary.official_n7six_firmware, /N7SIX/, file);
-    if (file !== 'en.js') {
-      assert.notEqual(
-        dictionary.official_n7six_firmware,
-        'Official N7SIX firmware',
-        file,
-      );
-    }
-  });
-});
-
 test('keeps locale dictionaries on the same key set', () => {
   const localeDir = path.join(root, 'locales');
   const files = fs
@@ -925,6 +1796,110 @@ test('keeps locale dictionaries on the same key set', () => {
   const expected = Object.keys(dictionaries[0].dictionary).sort();
   dictionaries.forEach(({ file, dictionary }) => {
     assert.deepEqual(Object.keys(dictionary).sort(), expected, file);
+  });
+});
+
+test('keeps app management and catalog descriptions translated in every locale', () => {
+  const localeDir = path.join(root, 'locales');
+  const files = fs
+    .readdirSync(localeDir)
+    .filter((file) => /^[a-z]{2}\.js$/.test(file));
+  const dictionaries = Object.fromEntries(
+    files.map((file) => {
+      const context = { window: {} };
+      vm.runInNewContext(
+        fs.readFileSync(path.join(localeDir, file), 'utf8'),
+        context,
+      );
+      return [
+        file.slice(0, 2),
+        context.window.UVSTUDIO_LOCALES[file.slice(0, 2)],
+      ];
+    }),
+  );
+  const english = dictionaries.en;
+  const languageInvariants = { de: new Set(['appColName']) };
+  const required = [
+    'appsDescription',
+    'appColName',
+    'appFileLabel',
+    'appTargetLabel',
+    'appInstallBtn',
+    'appDelete',
+    'appDetected',
+    'appTooBig',
+    'appBadFile',
+    'appsScanning',
+    'appsScanDone',
+    'appsError',
+    'appInstalling',
+    'appInstalled',
+    'appInstalledIncompatible',
+    'appErasing',
+    'appErased',
+    'appVerifying',
+    'appStateValid',
+    'appStateBadSlot',
+    'appStateEmpty',
+    'appStateAbi',
+    'appStateIncomplete',
+    'appStateBadSize',
+    'appStateCrc',
+    'appStateVma',
+    'appStateAuth',
+    'appStateCap',
+    'infoBoxApps',
+    'appManagerEyebrow',
+    'appManagerRadioPending',
+    'appManagerConnectHint',
+    'appManagerTabsLabel',
+    'appManagerInstalled',
+    'appManagerCatalog',
+    'appManagerOnRadio',
+    'appManagerInstalledHint',
+    'appManagerCategories',
+    'appCategoryAll',
+    'appCategoryRadio',
+    'appCategoryTools',
+    'appCategoryGames',
+    'appCategoryDemos',
+    'appManagerSearch',
+    'appManagerNoResults',
+    'appManagerLocalInstall',
+    'appManagerNoInstalled',
+    'appManagerInstalledCount',
+    'appManagerCapacity',
+    'appManagerCheckingCompatibility',
+    'appManagerCatalogCompatible',
+    'appManagerCatalogUnavailable',
+    'appManagerResultCount',
+    'appManagerForFirmware',
+    'appManagerScanBeforeInstall',
+    'appManagerNoFreeSlot',
+    ...Object.keys(english).filter((key) => key.startsWith('appDescription_')),
+  ];
+  Object.entries(dictionaries).forEach(([language, dictionary]) => {
+    if (language === 'en') return;
+    required.forEach((key) => {
+      assert.ok(dictionary[key], `${language}:${key}`);
+      if (!languageInvariants[language]?.has(key))
+        assert.notEqual(
+          dictionary[key],
+          english[key],
+          `${language}:${key} still English`,
+        );
+    });
+    Object.keys(english).forEach((key) => {
+      const placeholders = (value) =>
+        [...String(value).matchAll(/\{[^}]+\}/g)]
+          .map((match) => match[0])
+          .sort();
+      assert.deepEqual(
+        placeholders(dictionary[key]),
+        placeholders(english[key]),
+        `${language}:${key} placeholders`,
+      );
+    });
   });
 });
 
@@ -1093,33 +2068,78 @@ test('translates radio help and exposes every global serial status label', () =>
   assert.match(html, /data-i18n-aria-label="radio_led_state"/);
 });
 
+test('requires one reusable runtime connection for every menu except Flash and About', () => {
+  assert.match(
+    studioSource,
+    /const isFirmwareFlash = app === "tools" && toolView === "flash"/,
+  );
+  assert.match(
+    studioSource,
+    /const requiresRuntimeSerial = Boolean\(serialOwner\) && !isFirmwareFlash/,
+  );
+  assert.match(studioSource, /activate\(item, \{ ensureSerial: true \}\)/);
+  assert.match(studioSource, /await ensureRuntimeSerial\("tools"\)/);
+  assert.match(viewerSource, /uvstudio:serialrequired/);
+  assert.match(flashSource, /uvstudio:serialrequired/);
+  assert.match(flashSource, /connect\(\{ reuse: false, remember: false \}\)/);
+  assert.match(
+    flashSource,
+    /hardwareDisconnect && activePort\) toolsSerial\.forgetPort\(activePort\)/,
+  );
+  assert.match(viewerSource, /if \(port\) viewerSerial\.forgetPort\(port\)/);
+  assert.match(
+    flashSource,
+    /nextView === 'slots' && port && writer &&[\s\S]{0,80}void slotRefreshFlow\(\)/,
+  );
+  assert.match(serialSource, /ports\.filter\(matches\)/);
+  assert.match(
+    flashSource,
+    /view === 'apps' && navigationCapabilities\?\.apps === true/,
+  );
+  assert.match(
+    flashSource,
+    /canAttempt: \(\) => toolsViewUsesRuntimeSerial\(\) &&[\s\S]{0,100}!activeOperationToken/,
+  );
+
+  const calibrationDump = flashSource.slice(
+    flashSource.indexOf("beginToolsOperation('dump-calibration'"),
+    flashSource.indexOf('\nfunction flashAddress'),
+  );
+  assert.doesNotMatch(calibrationDump, /await disconnect\(\)/);
+});
+
 function loadToolsHardwareDisconnect(state) {
-  // handleToolsHardwareDisconnect closes over module-level lets; provide the
-  // full closure surface the extracted functions touch.
-  const fnSource = sliceFunctions(flashSource, [
-    'handleToolsHardwareDisconnect',
-    'scheduleSlotReconnectProbe',
-  ]);
-  const preamble = [
-    'let toolsHardwareDisconnectPromise = null;',
-    'let slotReconnectTimer = null;',
-    'let slotAutoReconnecting = false;',
-    'let slotLastPortInfo = null;',
-    'let slotReconnectInProgress = false;',
-  ].join('\n');
-  const fullSource = `${preamble}\n${fnSource}`;
+  const start = flashSource.indexOf(
+    'async function handleToolsHardwareDisconnect',
+  );
+  const end = flashSource.indexOf(
+    '\n\nasync function reconnectToolsPort',
+    start,
+  );
+  assert.ok(start >= 0 && end > start);
   const calls = [];
   const context = Object.assign(
     {
-      activeToolsView: 'flash',
+      activeToolsView: 'apps',
       port: {},
-      activeOperationToken: null,
+      toolsLastPortInfo: {},
+      toolsHardwareDisconnectPromise: null,
+      toolsRefreshPending: false,
+      toolsViewUsesRuntimeSerial() {
+        return context.activeToolsView !== 'flash';
+      },
+      async disconnectPort(details) {
+        calls.push(['disconnect', details.reason]);
+        context.port = null;
+      },
+      toolsReconnect: {
+        start(info) {
+          calls.push(['start', info]);
+        },
+      },
       log() {},
       t(key) {
         return key;
-      },
-      async handleSlotHardwareDisconnect() {
-        calls.push('slots');
       },
     },
     state,
@@ -1127,34 +2147,111 @@ function loadToolsHardwareDisconnect(state) {
   context.toolsSerial = {
     isOwner: () => true,
     async release(reason) {
-      calls.push(reason);
+      calls.push(['release', reason]);
       context.port = null;
+    },
+    setState(nextState) {
+      calls.push(['state', nextState]);
     },
   };
   vm.runInNewContext(
-    `${fullSource}; this.run = handleToolsHardwareDisconnect;`,
+    `${flashSource.slice(start, end)}; this.run = handleToolsHardwareDisconnect;`,
     context,
   );
   return { run: context.run, calls };
 }
 
-test('releases a port lost outside Firmware Slots so the next action reconnects', async () => {
+function loadDisconnectPort() {
+  const start = flashSource.indexOf('async function disconnectPort');
+  const end = flashSource.indexOf('\n\nconst toolsSerial', start);
+  assert.ok(start >= 0 && end > start);
+  const lostPort = {};
+  const calls = [];
+  const context = {
+    port: lostPort,
+    reader: {},
+    writer: {},
+    isReading: true,
+    toolsSerialSession: 0,
+    toolsSerial: {
+      forgetPort(value) {
+        calls.push(['forget', value]);
+      },
+    },
+    stopToolsReconnect() {
+      calls.push(['stop']);
+    },
+    shouldKeepFirmwareNavigationProfile(context) {
+      return (
+        (context?.reason === 'navigation' || context?.reason === 'handoff') &&
+        (context?.nextOwner === 'tools' || context?.nextOwner === 'viewer')
+      );
+    },
+    clearFirmwareNavigationProfile() {
+      calls.push(['policy', '', false], ['capabilities', null]);
+    },
+    notifySerialRead() {},
+    log() {},
+    t(key) {
+      return key;
+    },
+    window: {
+      UVStudioSerial: {
+        async closeResources(resources) {
+          calls.push(['close', resources.port]);
+        },
+      },
+    },
+  };
+  vm.runInNewContext(
+    `${flashSource.slice(start, end)}; this.run = disconnectPort;`,
+    context,
+  );
+  return { run: context.run, calls, lostPort };
+}
+
+test('forgets a reusable runtime port when the USB device is physically removed', async () => {
+  const { run, calls, lostPort } = loadDisconnectPort();
+  await run({ reason: 'hardware-disconnect' });
+  assert.deepEqual(calls, [
+    ['forget', lostPort],
+    ['close', lostPort],
+    ['policy', '', false],
+    ['capabilities', null],
+  ]);
+});
+
+test('keeps the detected edition while handing the runtime port to UV Viewer', async () => {
+  const { run, calls, lostPort } = loadDisconnectPort();
+  await run({ reason: 'navigation', nextOwner: 'viewer' });
+  assert.deepEqual(calls, [['stop'], ['close', lostPort]]);
+});
+
+test('keeps UV Tools ownership and starts one reconnect loop after a runtime disconnect', async () => {
   const { run, calls } = loadToolsHardwareDisconnect();
   await Promise.all([run(), run()]); // disconnect event + read loop ending
-  assert.deepEqual(calls, ['hardware-disconnect']);
+  assert.deepEqual(calls, [
+    ['disconnect', 'hardware-disconnect'],
+    ['state', 'reconnecting'],
+    ['start', {}],
+  ]);
 });
 
-test('leaves a lost port to the running operation and to Firmware Slots', async () => {
-  const busy = loadToolsHardwareDisconnect({ activeOperationToken: {} });
-  await busy.run();
-  assert.deepEqual(busy.calls, []);
-
+test('uses the same reconnect path for Apps and Firmware Slots but excludes firmware flashing', async () => {
   const slots = loadToolsHardwareDisconnect({ activeToolsView: 'slots' });
   await slots.run();
-  assert.deepEqual(slots.calls, ['slots']);
+  assert.deepEqual(slots.calls, [
+    ['disconnect', 'hardware-disconnect'],
+    ['state', 'reconnecting'],
+    ['start', {}],
+  ]);
+
+  const flash = loadToolsHardwareDisconnect({ activeToolsView: 'flash' });
+  await flash.run();
+  assert.deepEqual(flash.calls, [['release', 'hardware-disconnect']]);
 });
 
-test('gates every Labs-only feature on one Labs modal, before any confirmation', () => {
+test('keeps compatibility gates silent and before destructive confirmations', () => {
   const localeDir = path.join(root, 'locales');
   fs.readdirSync(localeDir)
     .filter((file) => /^[a-z]{2}\.js$/.test(file))
@@ -1165,30 +2262,30 @@ test('gates every Labs-only feature on one Labs modal, before any confirmation',
         context,
       );
       const dictionary = context.window.UVSTUDIO_LOCALES[file.slice(0, 2)];
-      assert.ok(dictionary.labsRequiredTitle, `${file}:labsRequiredTitle`);
-      assert.match(
-        dictionary.labsRequiredBody,
-        /\{0\}/,
-        `${file}:labsRequiredBody`,
+      assert.ok(
+        dictionary.studio_edition_unavailable_body,
+        `${file}:inline unavailable state`,
       );
-      assert.match(
-        dictionary.flashUnsupported,
-        /Labs/,
-        `${file}:flashUnsupported`,
+      assert.equal(
+        'labsRequiredTitle' in dictionary,
+        false,
+        `${file}:obsolete modal title`,
+      );
+      assert.equal(
+        'labsRequiredBody' in dictionary,
+        false,
+        `${file}:obsolete modal body`,
       );
       assert.doesNotMatch(
         dictionary.flashUnsupported,
-        /Fusion/,
-        `${file}:flashUnsupported`,
+        /Labs|Fusion|Service/i,
+        `${file}:generic guard log`,
       );
     });
-  assert.match(html, /id="labsRequiredModal"/);
-  assert.doesNotMatch(
-    flashSource,
-    /requireExternalFlashSupport|showAppUnsupportedModal/,
-  );
+  assert.doesNotMatch(html, /id="labsRequiredModal"/);
+  assert.doesNotMatch(flashSource, /showLabsRequiredModal|labsRequiredBody/);
 
-  // Destructive restores ask for confirmation only once Labs support is known.
+  // Destructive restores ask for confirmation only once support is known.
   const gateThen = (from, confirm) => {
     const start = flashSource.indexOf(from);
     assert.ok(start >= 0, from);
@@ -1201,4 +2298,454 @@ test('gates every Labs-only feature on one Labs modal, before any confirmation',
     "beginToolsOperation('restore-flash'",
     'confirmExternalFlashRestore()',
   );
+});
+
+test('flashes the firmware image, then writes the asset pack of the package', () => {
+  assert.ok(
+    html.indexOf('js/firmware-package.js') < html.indexOf('js/flash.js'),
+  );
+  assert.match(html, /<button id="flashAssetsBtn" disabled hidden>/);
+  assert.match(toolsCss, /#pane-tools #flashAssetsBtn\[hidden\]/);
+  // The install button only exists for a pack left pending by a flash.
+  assert.match(flashSource, /flashAssetsBtn\.hidden = !pendingFirmwareAssets/);
+  assert.match(
+    flashSource,
+    /navigator\.serial\.getPorts\(\)[\s\S]{0,300}FW_VCP_INFO/,
+  );
+  // Under the Flash button, the three steps carry their own gauges.
+  // The steps block opens with its title and the cable reminder.
+  assert.match(
+    html,
+    /<button id="flashBtn"[^>]*>[^<]*<\/button>\s*<div class="flash-steps" id="flashSteps"[^>]*>\s*<div class="flash-steps-header">[\s\S]{0,2000}id="flashStepsHint" data-i18n="flash_unplug_warning"/,
+  );
+  assert.match(
+    flashSource,
+    /setFlashStep\('assets', 'done', 'flash_step_done'\);\s*setFlashStepsComplete\(true\);/,
+  );
+  assert.equal(
+    (
+      html.match(/class="flash-step" data-step="(?:image|restart|assets)"/g) ||
+      []
+    ).length,
+    3,
+  );
+  assert.match(flashSource, /flashSteps\.hidden = !firmwareAssets/);
+  assert.match(
+    flashSource,
+    /flashFirmware\(fw, assets \? \{ onProgress: fraction => setFlashStepProgress\('image', fraction\) \} : \{\}\)/,
+  );
+  assert.match(flashSource, /if \(!report\) hideProgressSoon\(\)/);
+  assert.match(
+    flashSource,
+    /await flashFirmware\(fw, [^;]+\);[\s\S]{0,120}await installAssetsAfterFlash\(assets\);/,
+  );
+  assert.match(
+    flashSource,
+    /if \(assets\) await slotWriteAssets\(slot, assets, ts\);/,
+  );
+  // A firmware with assets is not written into a slot the running firmware
+  // cannot give them to: it would boot to a blank screen.
+  assert.match(
+    flashSource,
+    /if \(assets && !await slotCanWriteAssets\(slot\)\) \{\s*const text = slotNeedsV7Text\(dev\.name\);\s*log\(text, 'error'\);/,
+  );
+  assert.ok(
+    flashSource.indexOf('slotCanWriteAssets(slot)') <
+      flashSource.indexOf("log(t('slotErasing', slot)"),
+  );
+  // Payload first, header last: an interrupted upload never validates.
+  assert.match(
+    flashSource,
+    /for \(let off = header; off < pack\.length;[\s\S]{0,600}pack\.subarray\(0, header\)/,
+  );
+});
+
+test('shows each catalog app screenshot in the Live Viewer colors, with a persisted toggle', () => {
+  assert.match(
+    html,
+    /<button type="button" class="btn app-catalog-screens-toggle" id="appCatalogScreensToggle" aria-pressed="true" data-i18n-title="appCatalogScreensHint"/,
+  );
+  assert.match(html, /<span data-i18n="appCatalogScreens">Screenshots<\/span>/);
+  // A script, not image files: it also loads from file://.
+  assert.match(
+    html,
+    /<script src="js\/app-screens\.js\?v=\d+"><\/script>\n<script src="js\/app-catalog\.js/,
+  );
+  assert.doesNotMatch(appCatalogSource, /mask-?image/i);
+  assert.match(
+    appCatalogSource,
+    /card\.append\(icon, content, actions, createAppScreen\(app\)\)/,
+  );
+  assert.match(
+    appCatalogSource,
+    /canvas\.setAttribute\('aria-label', t\('appScreenshotAlt', app\.label\)\)/,
+  );
+  assert.match(
+    appCatalogSource,
+    /preferences\.set\(APP_SCREENSHOTS_PREFERENCE, showScreens \? '1' : '0'\)/,
+  );
+  assert.match(
+    appCatalogSource,
+    /window\.addEventListener\('uvstudio:lcdcolors'/,
+  );
+  assert.match(
+    viewerSource,
+    /root\.setProperty\('--k5-lcd-fg', invertLcd \? theme\[2\] : theme\[1\]\);\s*root\.setProperty\('--k5-lcd-bg'[^;]+;\s*window\.dispatchEvent\(new CustomEvent\('uvstudio:lcdcolors'\)\)/,
+  );
+  assert.match(
+    viewerSource,
+    /function toggleColors\(\) \{\s*invertLcd = 1 - invertLcd;\s*publishLcdColors\(\);/,
+  );
+  // Its shortcuts (G, O, B, W, I change those colors) only act on the viewer
+  // screen or from its detached keypad, never from the Apps view.
+  assert.match(
+    viewerSource,
+    /if \(viewerPane && !viewerPane\.classList\.contains\('active'\) && document\.contains\(k1Keyboard\)\) return;/,
+  );
+  assert.match(
+    toolsCss,
+    /\.app-catalog-screen-pixels\s*\{[^}]*max-width:\s*384px[^}]*aspect-ratio:\s*12 \/ 7/s,
+  );
+  assert.match(
+    appCatalogSource,
+    /const APP_SCREEN_CELL_W = 6;\s*const APP_SCREEN_CELL_H = 7;/,
+  );
+  assert.match(
+    toolsCss,
+    /\.app-catalog-screen\s*\{[^}]*background:\s*var\(--k5-lcd-bg, #e5e0ec\)/s,
+  );
+  assert.match(
+    toolsCss,
+    /\.app-catalog-cards\.hide-screens \.app-catalog-screen \{ display: none; \}/,
+  );
+  // The install / update gauge, 5 px, sits just above the screenshot when shown.
+  assert.match(toolsCss, /\.app-catalog-progress\s*\{[^}]*height:\s*5px/s);
+  assert.match(
+    toolsCss,
+    /\.app-catalog-screen \.app-catalog-progress\s*\{[^}]*top:\s*-9px[^}]*bottom:\s*auto/s,
+  );
+  assert.match(
+    appCatalogSource,
+    /return \(showScreens && card\.querySelector\('\.app-catalog-screen'\)\) \|\| card;/,
+  );
+  ['appCatalogScreens', 'appCatalogScreensHint', 'appScreenshotAlt'].forEach(
+    (key) => {
+      ['de', 'en', 'es', 'fr', 'it', 'nl', 'pl', 'pt', 'ru', 'zh'].forEach(
+        (lang) => {
+          const locale = fs.readFileSync(
+            path.join(root, 'locales', `${lang}.js`),
+            'utf8',
+          );
+          assert.match(
+            locale,
+            new RegExp(`"${key}": "[^"]+"`),
+            `${lang} ${key}`,
+          );
+        },
+      );
+    },
+  );
+});
+
+test('gives the community apps their own tab, with a banner, one warning and a checked download', () => {
+  // Installed, Catalog, Community: the community's apps, the local install and
+  // the submission live in the third tab, never among the official apps.
+  assert.match(
+    html,
+    /<button type="button" class="btn app-manager-tab" id="appCommunityTab" role="tab" aria-selected="false" aria-controls="appCommunityPanel" tabindex="-1">/,
+  );
+  assert.match(
+    html,
+    /<section class="app-manager-panel" id="appCommunityPanel" role="tabpanel" aria-labelledby="appCommunityTab" hidden>/,
+  );
+  const communityStart = html.indexOf('id="appCommunityPanel"');
+  const catalogPanel = html.slice(
+    html.indexOf('id="appCatalogPanel"'),
+    communityStart,
+  );
+  ['appCatalogCommunityToggle', 'id="appFile"', 'id="appSubmit"'].forEach(
+    (part) => {
+      assert.ok(!catalogPanel.includes(part), part);
+    },
+  );
+  [
+    'data-i18n="appCommunityBanner"',
+    'id="appCommunityCards"',
+    'id="appCommunityNone"',
+    'id="appFile"',
+    'id="appSubmit"',
+  ].forEach((part) => {
+    assert.ok(html.indexOf(part) > communityStart, part);
+  });
+  assert.match(
+    flashSource,
+    /community: \[appCommunityTab, document\.getElementById\('appCommunityPanel'\)\]/,
+  );
+  // Two shortcuts at the top, there even without a card, open those panels.
+  assert.match(
+    html,
+    /<div class="app-catalog-toolbar app-community-toolbar" id="appCommunityToolbar">/,
+  );
+  assert.match(
+    html,
+    /id="appCommunityLocalBtn" aria-controls="appLocalInstall"/,
+  );
+  assert.match(html, /id="appCommunitySubmitBtn" aria-controls="appSubmit"/);
+  assert.match(
+    html,
+    /<details class="app-local-install" id="appLocalInstall">/,
+  );
+  assert.ok(
+    html.indexOf('id="appCommunitySubmitBtn"') <
+      html.indexOf('id="appCommunityCards"'),
+  );
+  assert.match(
+    appCatalogSource,
+    /\[\['appCommunityLocalBtn', 'appLocalInstall'\], \['appCommunitySubmitBtn', 'appSubmit'\]\]\.forEach/,
+  );
+  assert.match(appCatalogSource, /panel\.open = true;\s*panel\.scrollIntoView/);
+  assert.match(
+    appCatalogSource,
+    /\[communityView\.search\?\.closest\('label'\), communityView\.filters, communitySummaryEl\]/,
+  );
+  assert.match(
+    toolsCss,
+    /\.app-community \.app-catalog-summary\[hidden\] \{ display: none; \}/,
+  );
+  // Read on entering the Apps view or the Community tab, whatever the official
+  // catalog does, once a minute at most, and drawn again only when it changed.
+  assert.match(
+    appCatalogSource,
+    /function openApps\(\) \{\s*void load\(\);\s*void loadCommunity\(\);/,
+  );
+  assert.match(
+    appCatalogSource,
+    /if \(event\.detail && event\.detail\.view === 'apps'\) openApps\(\);/,
+  );
+  assert.match(appCatalogSource, /const COMMUNITY_REFRESH_MS = 60 \* 1000;/);
+  assert.match(
+    appCatalogSource,
+    /if \(communityReading \|\| Date\.now\(\) - communityReadAt < COMMUNITY_REFRESH_MS\) return;/,
+  );
+  assert.match(
+    appCatalogSource,
+    /if \(state === communityState && signature === communitySignature\) return;/,
+  );
+  // A removed app still listed within GitHub's cache delay: its file answers
+  // 404 before an install or update, and its card goes with a notice.
+  assert.match(
+    appCatalogSource,
+    /gone = \(await fetch\(app\.url, \{ method: 'HEAD', cache: 'no-cache' \}\)\)\.status === 404;/,
+  );
+  assert.match(
+    appCatalogSource,
+    /void whenStillListed\(app, \(\) => confirmCommunityInstall\(app\)/,
+  );
+  assert.match(
+    html,
+    /<p class="app-community-notice" id="appCommunityNotice" role="status" hidden><\/p>/,
+  );
+  assert.match(
+    appCatalogSource,
+    /fetch\(COMMUNITY_MANIFEST_URL, \{ cache: 'no-cache' \}\)/,
+  );
+  assert.match(
+    appCatalogSource,
+    /const views = \[officialView, communityView\];/,
+  );
+  assert.match(
+    appCatalogSource,
+    /const manualURL = app\.community \? app\.source : appManualURL\(app\.id\);/,
+  );
+  assert.match(appCatalogSource, /manual\.rel = 'noopener noreferrer';/);
+  // The Installed list marks a community app and offers its updates.
+  assert.match(appCatalogSource, /new CustomEvent\('uvstudio:appcommunity'/);
+  assert.match(
+    flashSource,
+    /window\.addEventListener\('uvstudio:appcommunity'/,
+  );
+  assert.match(flashSource, /badge\.className = 'app-community-badge';/);
+  assert.match(flashSource, /return appCommunityApps\.get\(key\) \|\| null;/);
+  // The first install is confirmed, once; every file must match its entry.
+  assert.match(
+    html,
+    /<div class="modal" id="appCommunityModal" role="dialog" aria-modal="true"/,
+  );
+  assert.match(
+    appCatalogSource,
+    /preferences\.get\(APP_COMMUNITY_WARNED_PREFERENCE, '0'\) === '1'\) return Promise\.resolve\(true\);/,
+  );
+  assert.match(
+    appCatalogSource,
+    /preferences\.set\(APP_COMMUNITY_WARNED_PREFERENCE, '1'\);\s*\}\s*installCatalogApp\(app\);/,
+  );
+  assert.match(
+    appCatalogSource,
+    /flash\.installAppFromURL\(app\.url, app\.name, \{ onProgress: updateCatalogProgress, sha256: app\.sha256 \}\)/,
+  );
+  assert.match(
+    appCatalogSource,
+    /\{ onProgress: updateCatalogProgress, sha256: app\.sha256 \}\),/,
+  );
+  assert.match(
+    flashSource,
+    /if \(expectedSha256 && await sha256Hex\(buf\) !== expectedSha256\) \{\s*log\(t\('appCommunityHashMismatch'\), 'error'\);/,
+  );
+  assert.equal(
+    (
+      flashSource.match(
+        /loadAppFromURL\(url, catalogName, options\.sha256\)/g,
+      ) || []
+    ).length,
+    2,
+  );
+  assert.match(
+    flashSource,
+    /loadAppFromURL\(latest\.url, latest\.filename \|\| `\$\{latest\.name\}\.app`, latest\.sha256 \|\| ''\)/,
+  );
+  [
+    'appManagerCommunity',
+    'appCommunityBadgeHint',
+    'appCommunityBanner',
+    'appCommunityLoading',
+    'appCommunityNone',
+    'appCommunityUnavailable',
+    'appCommunityGone',
+    'appCommunityResultCount',
+    'appCommunityLocalButton',
+    'appCommunitySubmitButton',
+    'appCommunityWarningTitle',
+    'appCommunityWarningBody',
+    'appCommunityWarningConfirm',
+    'appCommunityHashMismatch',
+  ].forEach((key) => {
+    ['de', 'en', 'es', 'fr', 'it', 'nl', 'pl', 'pt', 'ru', 'zh'].forEach(
+      (lang) => {
+        const locale = fs.readFileSync(
+          path.join(root, 'locales', `${lang}.js`),
+          'utf8',
+        );
+        assert.match(locale, new RegExp(`"${key}": "[^"]+"`), `${lang} ${key}`);
+      },
+    );
+  });
+});
+
+test('lets a developer propose an app from the Community tab', () => {
+  const submitSource = fs.readFileSync(
+    path.join(root, 'js', 'app-submit.js'),
+    'utf8',
+  );
+  assert.match(
+    html,
+    /<details class="app-local-install app-submit" id="appSubmit">/,
+  );
+  assert.match(
+    html,
+    /<form class="app-local-install-body app-submit-body" id="appSubmitForm">/,
+  );
+  [
+    'appSubmitFile',
+    'appSubmitCapture',
+    'appSubmitAuthor',
+    'appSubmitCategory',
+    'appSubmitDescription',
+    'appSubmitSource',
+    'appSubmitPreview',
+    'appSubmitSend',
+    'appSubmitSignIn',
+    'appSubmitPaste',
+  ].forEach((id) => assert.match(html, new RegExp(`id="${id}"`), id));
+  // The step to follow after opening GitHub is set in bold (say() reads **...**).
+  assert.match(submitSource, /split\(\/\\\*\\\*\(\.\+\?\)\\\*\\\*\/\)/);
+  ['de', 'en', 'es', 'fr', 'it', 'nl', 'pl', 'pt', 'ru', 'zh'].forEach(
+    (lang) => {
+      const locale = fs.readFileSync(
+        path.join(root, 'locales', `${lang}.js`),
+        'utf8',
+      );
+      assert.match(
+        locale,
+        /"appSubmitOpened": "[^"]*\*\*[^"*]+Create\*\*/,
+        lang,
+      );
+    },
+  );
+  // No firmware field: the issue carries the firmware read from the radio.
+  assert.doesNotMatch(html, /id="appSubmitFirmware"/);
+  assert.match(
+    submitSource,
+    /firmware: flash && flash\.radioFirmwareName \? flash\.radioFirmwareName\(\) : ''/,
+  );
+  assert.match(flashSource, /appCurrentFirmwareName = fw\.name \|\| '';/);
+  // The screen comes over the tools connection, the Live Viewer only when it holds the radio.
+  assert.match(
+    flashSource,
+    /radioConnected: \(\) => Boolean\(port && writer && toolsSerial\.isOwner\(\)\),\s*captureScreen: captureRadioScreen,/,
+  );
+  assert.match(
+    flashSource,
+    /readBuffer\.push\(\.\.\.value\);\s*trackScreenBytes\(value\);/,
+  );
+  assert.match(
+    flashSource,
+    /const K5VIEWER_PING = Uint8Array\.of\(0x55, 0xAA, 0x00, 0x00\);/,
+  );
+  assert.match(
+    flashSource,
+    /const token = beginToolsOperation\('capture-screen', false\);/,
+  );
+  assert.match(
+    submitSource,
+    /viewer\.connected && viewer\.connected\(\) \? viewer\.lastFrame\(\) : null/,
+  );
+  assert.equal(
+    html.match(/<input type="checkbox" id="appSubmit\w+" required \/>/g).length,
+    3,
+  );
+  // Loaded after the catalog, whose painter and official ids it uses.
+  assert.match(
+    html,
+    /<script src="js\/app-catalog\.js\?v=\d+"><\/script>\n<script src="js\/app-submit\.js\?v=\d+"><\/script>/,
+  );
+  assert.match(appCatalogSource, /function isOfficialApp\(id\)/);
+  // The Live Viewer hands over its last screen in the catalog's LCD layout.
+  assert.match(
+    viewerSource,
+    /window\.UVStudioViewer = \{\s*connected: \(\) => isConnected,\s*lastFrame\(\)/,
+  );
+  assert.match(
+    viewerSource,
+    /function updateFPS\(\) \{\s*frameCount\+\+;\s*viewerFrameReceived = true;/,
+  );
+  // The window opens in the click itself, without waiting for anything.
+  assert.match(
+    submitSource,
+    /if \(link\.paste\) copy\(link\.paste\);\s*window\.open\(link\.url, '_blank', 'noopener'\);/,
+  );
+  assert.match(submitSource, /const URL_LIMIT = 7800;/);
+  assert.doesNotMatch(submitSource, /fetch\(/);
+  // Every message key of the module and the panel (element ids aside) is translated.
+  const keys = [
+    ...submitSource.matchAll(/(?<!\$\(|getElementById\()'(appSubmit\w+)'/g),
+  ]
+    .map((match) => match[1])
+    .concat(
+      [
+        ...html.matchAll(
+          /data-i18n(?:-placeholder|-aria-label)?="(appSubmit\w+)"/g,
+        ),
+      ].map((match) => match[1]),
+    );
+  new Set(keys).forEach((key) => {
+    ['de', 'en', 'es', 'fr', 'it', 'nl', 'pl', 'pt', 'ru', 'zh'].forEach(
+      (lang) => {
+        const locale = fs.readFileSync(
+          path.join(root, 'locales', `${lang}.js`),
+          'utf8',
+        );
+        assert.match(locale, new RegExp(`"${key}": "[^"]+"`), `${lang} ${key}`);
+      },
+    );
+  });
 });

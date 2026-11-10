@@ -1,10 +1,8 @@
 // Firmware catalog: lists stable archive/ files from the main branch and the
-// optional rolling development build from feature_update_v6 through the GitHub
-// Contents API. ApeX Edition builds are listed from the N7SIX ApeX repository
-// archive and merged into the same menu. Selected builds feed into either the
-// main flash pipeline or the multiboot-slot pipeline through
-// window.UVStudioFlash. Pure helpers are exported for Node tests; the browser
-// runtime is guarded and self-boots.
+// optional rolling development build from feature_update_v7 through the GitHub
+// Contents API. Selected builds feed into either the main flash pipeline or the
+// multiboot-slot pipeline through window.UVStudioFlash. Pure helpers are exported
+// for Node tests; the browser runtime is guarded and self-boots.
 (function (root, factory) {
   const api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;
@@ -22,18 +20,21 @@
 
   const REPO = 'armel/uv-k1-k5v3-firmware-custom';
   const ARCHIVE_PATH = 'archive';
-  const STABLE_BRANCH = 'main';
+  // main, or the development branch when the hidden developer switch is on.
+  const STABLE_BRANCH =
+    typeof globalThis !== 'undefined' &&
+    globalThis.UVStudioPreferences &&
+    typeof globalThis.UVStudioPreferences.catalogBranch === 'function'
+      ? globalThis.UVStudioPreferences.catalogBranch()
+      : 'main';
   const API_URL =
     `https://api.github.com/repos/${REPO}/contents/${ARCHIVE_PATH}` +
     `?ref=${encodeURIComponent(STABLE_BRANCH)}`;
-  const DEVELOPMENT_BRANCH = 'feature_update_v6';
+  const DEVELOPMENT_BRANCH = 'feature_update_v7';
   const DEVELOPMENT_FILENAME = 'f4hwn.fusion.development.bin';
   const DEVELOPMENT_API_URL =
     `https://api.github.com/repos/${REPO}/contents/${ARCHIVE_PATH}/${DEVELOPMENT_FILENAME}` +
     `?ref=${encodeURIComponent(DEVELOPMENT_BRANCH)}`;
-  // ApeX Edition (N7SIX), listed from its own repository archive on main. The
-  // fork still mirrors the F4HWN and Quansheng archives; only the ApeX builds
-  // are merged so every firmware is offered exactly once.
   const APEX_REPO = 'N7SIX/UV-K1Series_ApeX-Edition_v7.6.0';
   const APEX_API_URL =
     `https://api.github.com/repos/${APEX_REPO}/contents/${ARCHIVE_PATH}` +
@@ -91,10 +92,8 @@
       brand = 'f4hwn';
       group = 'development';
     } else if (lower.startsWith('n7six')) {
-      // ApeX Edition builds, e.g. n7six.ApeX-k1.v7.6.12.bin,
-      // n7six.ApeXLabs-k1.v7.6.13.bin.
       const apexMatch = lower.match(
-        /^n7six[._-]apex(?:labs)?(?:[._-](k1|k5v3))?(?:[._-].*)?\.bin$/,
+        /^n7six[._-]apex(?:[._-](k1|k5v3))?(?:[._-].*)?\.bin$/,
       );
       if (!apexMatch) return null;
       brand = 'apex';
@@ -167,9 +166,8 @@
     );
   }
 
-  // Multiboot slots offer stable v6+ F4HWN and ApeX editions (ApeX extends
-  // Fusion). Older images, the rolling development build and Quansheng stock
-  // images do not embed multiboot.
+  // Multiboot slots offer stable v6+ F4HWN editions. Older images, the rolling
+  // development build and Quansheng stock images do not embed multiboot.
   function isSlotOffered(entry) {
     return (
       Boolean(entry) &&
@@ -213,9 +211,6 @@
     return files;
   }
 
-  // Keep only the ApeX-branded builds from the ApeX repository listing: the
-  // fork still mirrors the F4HWN and Quansheng archives, which would otherwise
-  // duplicate the main listing.
   function mergeApexFiles(apexFiles) {
     return (Array.isArray(apexFiles) ? apexFiles : [])
       .filter((file) => {
@@ -277,11 +272,11 @@
   // ========== BROWSER RUNTIME ==========
 
   function boot() {
+    const apexSelect = document.getElementById('apexFirmwareCatalogSelect');
+    const apexSection = document.getElementById('apexFirmwareCatalogSection');
     const select = document.getElementById('firmwareCatalogSelect');
     const section = document.getElementById('firmwareCatalogSection');
     const divider = document.getElementById('firmwareCatalogOr');
-    const apexSelect = document.getElementById('apexFirmwareCatalogSelect');
-    const apexSection = document.getElementById('apexFirmwareCatalogSection');
     const slotSelect = document.getElementById('slotFirmwareCatalogSelect');
     const slotSection = document.getElementById('slotFirmwareCatalogSection');
     const slotDivider = document.getElementById('slotFirmwareCatalogOr');
@@ -332,40 +327,34 @@
       }
     }
 
-    // Best-effort ApeX listing: when unreachable, the catalog still renders the
-    // F4HWN builds exactly as before.
     async function fetchApexFiles() {
+      let archiveFiles = [];
       try {
         const response = await fetch(APEX_API_URL, { cache: 'no-cache' });
-        const archiveFiles = response.ok
-          ? mergeApexFiles(await response.json())
-          : [];
-        // Also include the binary firmware published as a release asset, so the
-        // latest ApeX build is offered even before it lands in the archive.
-        let releaseFiles = [];
-        try {
-          const releaseResponse = await fetch(APEX_RELEASES_API_URL, {
-            cache: 'no-cache',
-          });
-          if (releaseResponse.ok) {
-            const release = await releaseResponse.json();
-            releaseFiles = mergeApexFiles(release.assets || []);
-          }
-        } catch (e) {
-          releaseFiles = [];
-        }
-        // Deduplicate by name, preferring the archive copy when both exist.
-        const seen = new Set();
-        const merged = [];
-        for (const file of archiveFiles.concat(releaseFiles)) {
-          if (seen.has(file.name)) continue;
-          seen.add(file.name);
-          merged.push(file);
-        }
-        return merged;
+        if (response.ok) archiveFiles = mergeApexFiles(await response.json());
       } catch (error) {
-        return [];
+        archiveFiles = [];
       }
+
+      let releaseFiles = [];
+      try {
+        const response = await fetch(APEX_RELEASES_API_URL, {
+          cache: 'no-cache',
+        });
+        if (response.ok) {
+          const release = await response.json();
+          releaseFiles = mergeApexFiles(release.assets || []);
+        }
+      } catch (error) {
+        releaseFiles = [];
+      }
+
+      const seen = new Set();
+      return archiveFiles.concat(releaseFiles).filter((file) => {
+        if (seen.has(file.name)) return false;
+        seen.add(file.name);
+        return true;
+      });
     }
 
     // Build the menu and return how many firmware options it holds.
@@ -407,8 +396,6 @@
       return optionCount;
     }
 
-    // The N7SIX picker lists only ApeX Edition builds; the F4HWN picker keeps
-    // everything else so each firmware is offered exactly once.
     function isApexOffered(entry) {
       return isOffered(entry) && entry.brand === 'apex';
     }
@@ -455,8 +442,6 @@
         );
         groups = categorize(files);
         const counts = render();
-        // The N7SIX and F4HWN pickers show independently: whichever repository
-        // answered still offers its builds when the other one is unreachable.
         if (apexSection) apexSection.hidden = counts.apex === 0;
         if (section) section.hidden = counts.flash === 0;
         if (divider) divider.hidden = counts.apex === 0 && counts.flash === 0;
@@ -487,27 +472,24 @@
       }
     }
 
-    function loadCatalogUrl(targetSelect, url, loaderName) {
-      if (!url) return;
+    function loadCatalogUrl(targetSelect) {
+      if (!targetSelect.value) return;
       const flash = window.UVStudioFlash;
-      if (flash && typeof flash[loaderName] === 'function') {
-        flash[loaderName](url);
+      if (flash && typeof flash.loadFirmwareFromURL === 'function') {
+        flash.loadFirmwareFromURL(targetSelect.value);
       }
     }
 
     if (apexSelect) {
       apexSelect.addEventListener('change', () => {
-        loadCatalogUrl(apexSelect, apexSelect.value, 'loadFirmwareFromURL');
-        // Only one flash source stays selected: picking here clears the F4HWN
-        // picker back to its placeholder.
+        loadCatalogUrl(apexSelect);
         if (select && select.options.length) select.selectedIndex = 0;
       });
     }
 
     if (select) {
       select.addEventListener('change', () => {
-        loadCatalogUrl(select, select.value, 'loadFirmwareFromURL');
-        // Mirror rule: picking here clears the N7SIX picker.
+        loadCatalogUrl(select);
         if (apexSelect && apexSelect.options.length)
           apexSelect.selectedIndex = 0;
       });
@@ -529,15 +511,9 @@
       if (groups) render();
     });
 
-    // Mutual exclusivity: when a local file is picked, drop both catalog
-    // selections back to their placeholders so only one firmware source ever
-    // looks selected.
+    // Keep only one firmware source selected after choosing a local file.
     window.addEventListener('uvstudio:firmwareselect', (event) => {
-      if (
-        event.detail &&
-        event.detail.source === 'local' &&
-        (apexSelect || select)
-      ) {
+      if (event.detail && event.detail.source === 'local') {
         [apexSelect, select].forEach((catalogSelect) => {
           if (catalogSelect && catalogSelect.options.length) {
             catalogSelect.selectedIndex = 0;

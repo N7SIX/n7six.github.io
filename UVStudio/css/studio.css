@@ -41,11 +41,11 @@ body {
   width: 34px;
   height: 34px;
   border-radius: 9px;
-  background: linear-gradient(150deg, #00ce7c, #00b96b);
-  color: #001a10;
+  background: linear-gradient(150deg, #3b82f6, #2563eb);
+  color: #fff;
   flex: 0 0 auto;
   box-shadow:
-    0 2px 8px rgba(0, 206, 124, 0.4),
+    0 2px 8px rgba(37, 99, 235, 0.4),
     inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 .logo-mark svg {
@@ -347,26 +347,40 @@ body {
   background: color-mix(in oklab, var(--text) 6%, transparent);
   color: var(--text);
 }
+.nav-item.is-edition-disconnected {
+  opacity: 0.55;
+  filter: saturate(0.35);
+}
 .nav-item:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
+  opacity: 1;
 }
-.nav-item.active:disabled {
-  opacity: 0.82;
+.nav-item:disabled > svg,
+.nav-item:disabled .nav-item-label {
+  opacity: 0.5;
+  filter: saturate(0.35);
+}
+.nav-item.active:disabled > svg,
+.nav-item.active:disabled .nav-item-label {
+  opacity: 0.62;
+}
+.nav-item:disabled .tag {
+  opacity: 1;
+  filter: none;
 }
 .nav-item.active {
-  background: linear-gradient(160deg, #00ce7c 0%, #00b96b 100%);
-  color: #001a10;
+  background: linear-gradient(160deg, #3b82f6 0%, #2563eb 100%);
+  color: #fff;
   box-shadow:
-    0 2px 8px rgba(0, 206, 124, 0.35),
+    0 2px 8px rgba(37, 99, 235, 0.35),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 .nav-item.active .tag {
-  background: rgba(0, 0, 0, 0.16);
-  color: #001a10;
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
 }
 [data-theme='dark'] .nav-item.active {
-  background: linear-gradient(135deg, #00b96b, #00ce7c);
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
 }
 .sidebar-foot {
   margin-top: 0;
@@ -422,6 +436,21 @@ body {
 .notifications {
   top: auto;
   bottom: 20px;
+}
+
+@media (max-width: 640px) {
+  .notifications {
+    top: 66px;
+    right: 12px;
+    bottom: auto;
+    left: 12px;
+    align-items: stretch;
+    pointer-events: none;
+  }
+  .notification {
+    max-width: none;
+    padding: 9px 12px;
+  }
 }
 
 /* Viewer sub-views: Live Viewer (screen + keypad) vs RF Log */
@@ -698,10 +727,10 @@ body {
   width: 64px;
   height: 64px;
   border-radius: 18px;
-  color: #001a10;
-  background: linear-gradient(150deg, #00ce7c, #00b96b);
+  color: #fff;
+  background: linear-gradient(150deg, #3b82f6, #2563eb);
   box-shadow:
-    0 8px 22px rgba(0, 206, 124, 0.28),
+    0 8px 22px rgba(37, 99, 235, 0.28),
     inset 0 1px 0 rgba(255, 255, 255, 0.24);
 }
 .about-mark svg {

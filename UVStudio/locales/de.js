@@ -24,6 +24,19 @@ window.UVSTUDIO_LOCALES.de = {
   connectBtn: 'Mit seriellem Port verbinden',
   disconnectBtn: 'Trennen',
   flashBtn: 'Firmware flashen',
+  flash_step_image: 'Firmware flashen',
+  flash_step_restart: 'Neustart des Funkgeräts',
+  flash_step_assets: 'Assets schreiben',
+  flash_step_image_hint: 'DFU-Modus',
+  flash_step_restart_hint: 'Automatisch',
+  flash_step_assets_hint: 'Schriften, Menüs',
+  flash_step_done: 'Fertig',
+  flash_step_waiting: 'Warte auf das Funkgerät…',
+  flash_step_detected: 'Funkgerät erkannt',
+  flash_step_failed: 'Fehlgeschlagen',
+  flash_steps_title: 'Installation in 3 Schritten',
+  flash_unplug_warning: 'Kabel bis zum Ende angeschlossen lassen',
+  flash_unplug_done: 'Fertig: Sie können das Kabel abziehen',
   dumpBtn: 'Kalibrierungsdaten auslesen',
   restoreBtn: 'Kalibrierungsdaten wiederherstellen',
   logTitle: 'Konsole',
@@ -311,58 +324,97 @@ window.UVSTUDIO_LOCALES.de = {
   slotStateBadSlot: 'ungültiger Slot',
   slotStateAuth: 'Auth-Fehler',
   slotStateError: 'Fehler',
+  slotStateMismatch: 'Assets eines anderen Builds',
+  flashAssetsBtn: 'Firmware-Assets installieren',
+  fwAssetsDetected:
+    'Firmware-Assets enthalten ({0} Bytes): Sie werden nach dem Flashen geschrieben.',
+  fwPackageInvalid: 'Beschädigte Firmware-Datei {0}: {1}',
+  fwAssetsImageDone:
+    'Firmware-Image programmiert. Kabel nicht abziehen: Die Assets müssen noch geschrieben werden.',
+  fwAssetsWaitRadio:
+    'Warte auf die neue Firmware (Funkgerät normal neu starten, falls es das nicht selbst tut): Ihre Assets werden automatisch geschrieben...',
+  fwAssetsReconnect:
+    'Assets noch nicht geschrieben: Funkgerät normal einschalten, dann auf „Firmware-Assets installieren“ klicken.',
+  fwAssetsWriting: 'Firmware-Assets werden geschrieben (Schriften, Menüs)...',
+  fwAssetsWriteOk: 'Firmware-Assets geschrieben und geprüft.',
+  fwAssetsError: 'Fehler bei den Firmware-Assets: {0}',
+  fwAssetsWrongFirmware:
+    'Diese Assets gehören zu einem anderen Firmware-Build: Zuerst die passende Firmware flashen.',
+  slotNeedsV7Running:
+    'Auf Ihrem Funkgerät läuft Firmware {0}, die zu alt ist, um die ausgewählte Version in einem Slot zu installieren.',
+  slotNeedsV7:
+    'Aktualisieren Sie zuerst die Hauptfirmware auf 7.0 oder neuer und versuchen Sie es dann erneut.',
+  slotAssetsBlockedTitle: 'Aktualisierung erforderlich',
+  fwAssetsSlotRunning:
+    'Slot {0} läuft gerade: Nach dem Wiederherstellen seine Assets mit „Firmware-Assets installieren“ installieren.',
   infoBoxSlots:
     '<strong>Hinweis:</strong> Diese Anwendung erfordert Chrome/Edge/Opera oder Firefox 151+ auf dem Desktop. Stellen Sie sicher, dass sich Ihr Funkgerät im <strong>Normalmodus</strong> befindet und eine Fusion-Firmware mit aktiviertem Multiboot ausführt.',
   studio_nav_apps: 'Apps',
   studio_nav_labs_only: 'nur Labs',
+  studio_nav_service_only: 'nur Service',
+  studio_nav_fusion_only: 'nur Fusion',
+  studio_nav_unavailable_edition:
+    'Für die verbundene Firmware-Edition nicht verfügbar',
+  studio_edition_unavailable_body:
+    'Die verbundene Firmware unterstützt diesen Bereich nicht.',
   appsDescription:
-    "Install small overlay apps (.app) into the radio's external flash and launch them from the F + 7 menu. Writing only touches the external flash, so the radio stays usable.",
-  app_catalog_label: 'Offizielle F4HWN-Overlay-Apps',
-  apex_app_catalog_label: 'Offizielle N7SIX-Overlay-Apps',
+    'Installiere nur die benötigten Werkzeuge. Apps werden über das Menü F + 7 des Funkgeräts gestartet.',
+  app_catalog_label: 'Offizielle Overlay-Apps',
   app_catalog_version_label: 'Firmware-Version',
   app_catalog_version_placeholder: '— Firmware-Version auswählen —',
   app_catalog_app_label: 'Anwendung',
   app_catalog_app_placeholder: '— App auswählen —',
+  appLocalBuild: 'Benutzerdefiniert',
+  appLocalBuildFolder: 'Benutzerdefiniert · {0}',
+  appLocalBuildChange: 'Ändern…',
   app_catalog_or: 'oder eine lokale Datei laden',
   appColName: 'Name',
-  appColUpdate: 'Update',
+  appColActions: 'Aktionen',
   updateCurrent: 'Aktuell',
-  appColSize: 'Size',
-  appsRefresh: 'Refresh apps',
-  appFileLabel: 'App file (.app)',
-  appTargetLabel: 'Target slot',
-  appInstallBtn: 'Install app',
-  appDelete: 'Delete',
+  appColSize: 'Größe',
+  appSizeCode: '{0} Code',
+  appSizeAssets: '{0} Assets',
+  appsRefresh: 'Apps vom Funkgerät lesen',
+  appFileLabel: 'App-Datei (.app)',
+  appTargetLabel: 'Ziel-Slot',
+  appInstallBtn: 'App installieren',
+  appDelete: 'Löschen',
+  appDeleteAll: 'Alle löschen',
+  appDeleteAllTitle: 'Alle Anwendungen löschen?',
+  appDeleteAllConfirm:
+    'Dadurch werden alle {0} installierten Anwendungen dauerhaft vom Funkgerät entfernt. Fortfahren?',
+  appDeleteAllDone: 'Alle Anwendungen wurden entfernt.',
   appUpdateAction: 'Auf {0} aktualisieren',
-  appDetected: 'Detected: {0} · {1} · {2} KB',
-  appTooBig: 'This app is too large for the 4 KiB overlay.',
-  appBadFile: 'Not a valid .app file (bad header).',
-  appsScanning: 'Scanning app slots…',
-  appsScanDone: 'App scan complete.',
-  appsError: 'Apps error: {0}',
-  labsRequiredTitle: 'Labs Edition erforderlich',
-  labsRequiredBody:
-    'Die Funktion <strong>{0}</strong> wird von der aktuell geflashten Firmware nicht unterstützt. Installiere die <strong>Labs Edition</strong>, um sie zu nutzen.',
+  appUpdateShort: 'Aktualisieren',
+  appDetected: 'Erkannt: {0} · {1} · {2} KB',
+  appTooBig: 'Diese App überschreitet die maximale Overlay-Größe von 4 KiB.',
+  appBadFile: 'Keine gültige .app-Datei (fehlerhafter Header).',
+  appsScanning: 'App-Slots werden durchsucht…',
+  appsScanDone: 'App-Suche abgeschlossen.',
+  appsError: 'App-Fehler: {0}',
   appUnsupportedLog: 'Firmware {0} unterstützt keine Overlay-Apps.',
   appUnknownFirmware: 'unbekannt',
   appClose: 'Schließen',
-  appInstalling: 'Writing app to slot {0}…',
-  appInstalled: 'App installed in slot {0}.',
-  appErasing: 'Erasing app slot {0}…',
-  appErased: 'App slot {0} erased.',
-  appVerifying: 'Verifying app slot {0}…',
-  appStateValid: 'valid',
-  appStateBadSlot: 'bad slot',
-  appStateEmpty: 'empty',
-  appStateAbi: 'ABI mismatch',
+  appInstalling: 'App wird in Slot {0} geschrieben…',
+  appInstalled: 'App in Slot {0} installiert.',
+  appInstalledIncompatible:
+    'App in Slot {0} installiert, aber diese Firmware kann sie nicht starten: {1}.',
+  appErasing: 'App-Slot {0} wird gelöscht…',
+  appErased: 'App-Slot {0} gelöscht.',
+  appVerifying: 'App-Slot {0} wird geprüft…',
+  appStateValid: 'gültig',
+  appStateBadSlot: 'ungültiger Slot',
+  appStateEmpty: 'leer',
+  appStateAbi: 'ABI inkompatibel',
   appStateFirmwareMismatch: 'nicht kompatibel mit Labs {0}',
-  appStateIncomplete: 'incomplete',
-  appStateBadSize: 'bad size',
-  appStateCrc: 'CRC error',
-  appStateVma: 'VMA mismatch',
-  appStateAuth: 'auth error',
+  appStateIncomplete: 'unvollständig',
+  appStateBadSize: 'ungültige Größe',
+  appStateCrc: 'CRC-Fehler',
+  appStateVma: 'VMA inkompatibel',
+  appStateAuth: 'Authentifizierungsfehler',
+  appStateCap: 'von dieser Firmware nicht unterstützt',
   infoBoxApps:
-    '<strong>Note:</strong> This application requires Chrome/Edge/Opera or Firefox 151+ on desktop. Make sure your radio is in <strong>normal mode</strong> and running the <strong>Labs</strong> edition, the only firmware that includes overlay apps.',
+    '<strong>Hinweis:</strong> Diese Anwendung erfordert Chrome/Edge/Opera oder Firefox 151+ auf einem Desktop-Computer. Das Funkgerät muss sich im <strong>Normalmodus</strong> befinden und die Edition <strong>Labs</strong> ausführen, die einzige Firmware mit Overlay-Apps.',
   studio_nav_calibration: 'Kalibrierung',
   studio_nav_logo: 'Startlogo',
   studio_nav_external_flash: 'Externer Flash',
@@ -424,7 +476,7 @@ window.UVSTUDIO_LOCALES.de = {
   flashReadError: 'Lesefehler im externen Flash bei 0x{0}',
   flashVerifyError: 'Prüfung des externen Flash fehlgeschlagen bei 0x{0}',
   flashUnsupported:
-    'Diese Firmware unterstützt keinen vollständigen Zugriff auf den externen Flash. Installiere zuerst die Labs Edition.',
+    'Der vollständige Zugriff auf den externen Flash ist für die verbundene Firmware-Edition nicht verfügbar.',
   studio_nav_export_rf_log: 'RF-Protokoll exportieren',
   studio_rf_empty_title:
     'Verbinden Sie das Funkgerät, um das RF-Protokoll anzuzeigen.',
@@ -473,7 +525,192 @@ window.UVSTUDIO_LOCALES.de = {
   studio_operation_dump_logo: 'Logo wird gelesen…',
   studio_operation_dump_flash: 'Externer Flash wird ausgelesen…',
   studio_operation_restore_flash: 'Externer Flash wird wiederhergestellt…',
+  studio_operation_apps_reorder: 'Apps werden neu angeordnet…',
+  studio_operation_apps_renumber: 'Apps werden neu nummeriert…',
   studio_operation_factory_reset: 'UV-K1-Werkssoftware wird wiederhergestellt…',
   studio_operation_export_rf_log: 'RF-Log wird exportiert…',
   toggle_menu: 'Menü ein-/ausblenden',
+  appManagerEyebrow: 'APP-VERWALTUNG',
+  appManagerRadioPending: 'Warten auf das Funkgerät…',
+  appManagerConnectHint: 'Funkgerät verbinden, um die Kompatibilität zu prüfen',
+  appManagerTabsLabel: 'App-Verwaltung',
+  appManagerInstalled: 'Installiert',
+  appManagerCatalog: 'Katalog',
+  appManagerOnRadio: 'Auf deinem Funkgerät',
+  appManagerInstalledHint: 'Im Funkgerätmenü erscheinen nur installierte Apps.',
+  appOrderApply: 'Reihenfolge anwenden',
+  appRenumber: 'Neu nummerieren',
+  appOrderCancel: 'Abbrechen',
+  appOrderReading: 'App-Slots werden gelesen…',
+  appOrderWriting: 'App-Reihenfolge wird geschrieben…',
+  appOrderDone: 'App-Reihenfolge aktualisiert.',
+  appRenumberDone: 'Apps neu nummeriert.',
+  appOrderApplyFirst:
+    'Wenden Sie die neue Reihenfolge an oder verwerfen Sie sie, bevor Sie fortfahren.',
+  appManagerCategories: 'Kategorien',
+  appCategoryAll: 'Alle',
+  appCategoryRadio: 'Radio und Signale',
+  appCategoryTools: 'Werkzeuge',
+  appCategoryGames: 'Spiele',
+  appCategoryDemos: 'Demonstrationen',
+  appCategoryOther: 'Sonstige',
+  appManagerSearch: 'Apps suchen…',
+  appManagerNoResults: 'Keine App entspricht dieser Suche.',
+  appManagerLocalInstall: 'Lokale App installieren',
+  appManagerNoInstalled: 'Auf diesem Funkgerät sind keine Apps installiert.',
+  appManagerInstalledCount: '{0} Apps installiert',
+  appManagerCapacity: '{0} von {1} Slots belegt',
+  appManagerCheckingCompatibility: 'Katalogkompatibilität wird geprüft…',
+  appManagerCatalogCompatible: 'Funkgerät verbunden · Kompatibler Katalog',
+  appManagerCatalogUnavailable: 'Kein Katalog für diese Firmware gefunden',
+  appManagerResultCount: '{0} kompatible Apps',
+  appCatalogScreens: 'Screenshots',
+  appCatalogScreensHint: 'Screenshots der Apps ein- oder ausblenden',
+  appScreenshotAlt: 'Screenshot von {0}',
+  appManagerCommunity: 'Community',
+  appCommunityBadgeHint: 'Von ihrem Autor geteilt, nicht von F4HWN geprüft',
+  appCommunityBanner:
+    'Von ihren Autoren geteilte Apps, nicht von F4HWN geprüft. Installiere sie nur, wenn du ihrem Autor vertraust.',
+  appCommunityLoading: 'Community-Apps werden gelesen…',
+  appCommunityNone:
+    'Noch keine Community-App. Du hast eine gemacht? Schlag sie unten vor.',
+  appCommunityUnavailable:
+    'Die Community-Apps konnten nicht gelesen werden. Prüfe deine Verbindung.',
+  appCommunityGone: '{0} wurde aus dem Community-Katalog entfernt.',
+  appCommunityResultCount: '{0} Apps',
+  appCommunityLocalButton: '.app installieren',
+  appCommunitySubmitButton: 'App vorschlagen',
+  appManual: 'Handbuch',
+  appCommunityWarningTitle: 'Eine Community-App installieren?',
+  appCommunityWarningBody:
+    '{0} wird von {1} geteilt. Community-Apps werden nicht von F4HWN geprüft: Eine App läuft mit vollem Zugriff auf dem Funkgerät, einschließlich Senden. Installiere sie nur, wenn du ihrem Autor vertraust.',
+  appCommunityWarningConfirm: 'Installieren',
+  appCommunityHashMismatch:
+    'Die heruntergeladene App stimmt nicht mit dem Katalog überein: versuche es in einigen Minuten erneut.',
+  appSubmitTitle: 'App der Community vorschlagen',
+  appSubmitIntro:
+    'Teile eine selbst erstellte App: UV Studio prüft sie hier und öffnet dann GitHub mit der fertigen Einreichung.',
+  appSubmitAccount: 'Ein GitHub-Konto ist nötig.',
+  appSubmitScreen: 'Screenshot',
+  appSubmitCapture: 'Bildschirm des Funkgeräts aufnehmen',
+  appSubmitScreenHint:
+    'Verbinde das Funkgerät, starte die App darauf und nimm dann ihren Bildschirm auf.',
+  appSubmitScreenOk: 'Bildschirm bereit: prüfe ihn in der Vorschau unten.',
+  appSubmitCaptureFailed:
+    'Das Funkgerät hat seinen Bildschirm nicht gesendet: versuche es erneut.',
+  appSubmitRadioBusy:
+    'Das Funkgerät ist mit einem anderen Vorgang beschäftigt: versuche es gleich noch einmal.',
+  appSubmitNoRadio:
+    'Kein Funkgerät verbunden: verbinde es mit laufender App und nimm erneut auf.',
+  appSubmitAuthor: 'Autor',
+  appSubmitAuthorHint: 'Spitzname oder Rufzeichen',
+  appSubmitCategory: 'Kategorie',
+  appSubmitDescription: 'Beschreibung',
+  appSubmitDescriptionHint: 'Ein Satz auf Englisch',
+  appSubmitSource: 'Handbuch: README- oder Wiki-Seite (optional)',
+  appSubmitAgreeTested: 'Ich habe diese App an meinem Funkgerät getestet.',
+  appSubmitAgreeRights:
+    'Ich darf diese App verbreiten und stimme ihrer Weitergabe über UV Studio zu.',
+  appSubmitAgreeRemoval:
+    'Mir ist bewusst, dass die App jederzeit aus dem Katalog entfernt werden kann.',
+  appSubmitPreview: 'Vorschau im Katalog',
+  appSubmitSend: 'Einreichung auf GitHub öffnen',
+  appSubmitSignIn: 'Melde dich vor dem Klick bei GitHub an.',
+  appSubmitAppOk: '{0} v{1}: gültige App (API-Level {2}).',
+  appSubmitNotApp: 'Diese Datei ist keine Overlay-App.',
+  appSubmitAbi:
+    'Diese App wurde für eine andere Firmware-Generation gebaut (ABI {0}).',
+  appSubmitTooNew:
+    'Diese App braucht API-Level {0}; die aktuelle Firmware bietet Level {1}.',
+  appSubmitCaps:
+    'Diese App verlangt Fähigkeiten, die die Firmware nicht bietet (0x{0}).',
+  appSubmitDamaged: 'Diese .app ist beschädigt oder fehlerhaft gebaut ({0}).',
+  appSubmitTaken: 'Eine offizielle App heißt bereits {0}: benenne deine um.',
+  appSubmitNeedApp: 'Wähle zuerst eine gültige .app-Datei.',
+  appSubmitNeedScreen: 'Füge zuerst einen Screenshot der App hinzu.',
+  appSubmitOpened:
+    'GitHub wurde in einem neuen Tab geöffnet: **prüfe die Einreichung und klicke dann auf Create**. Ein Bot antwortet innerhalb weniger Minuten. Hat GitHub nach der Anmeldung einen Fehler gezeigt, klicke erneut auf die Schaltfläche: Jetzt bist du angemeldet.',
+  appSubmitCopied:
+    'Die App ist zu groß für einen Link: die Einreichung wurde kopiert. Füge sie auf GitHub in die Beschreibung ein (Strg+V oder Cmd+V) und klicke dann auf Create.',
+  appManagerForFirmware: 'für Labs v{0}',
+  appManagerScanBeforeInstall:
+    'Funkgerät vor der App-Installation aktualisieren',
+  appManagerNoFreeSlot: 'Kein freier App-Slot verfügbar.',
+  appDescription_acarsrx:
+    'Empfängt und decodiert ACARS-Nachrichten von Flugzeugen.',
+  appDescription_afscope:
+    'Oszilloskop und Stimmgerät für das empfangene Audio: Wellenform, Frequenzzähler und Tonzeiger.',
+  appDescription_afspectro:
+    'Spektrum und Sonogramm des empfangenen Audios: Hauptspitzen und Pegelunterschied zwischen zwei Tönen.',
+  appDescription_aisrx:
+    'Empfängt AIS-Meldungen von Schiffen: Name, Position, Geschwindigkeit, Kurs, Ziel und Inland-Daten.',
+  appDescription_aprsdigi: 'Leitet APRS-Pakete als Digipeater weiter.',
+  appDescription_aprsedit:
+    'Bearbeitet die APRS-TX-Bake: Rufzeichen, Position, Symbol und Kommentar.',
+  appDescription_aprsrx: 'Empfängt und decodiert APRS-Pakete.',
+  appDescription_aprstx: 'Sendet APRS-Baken über das Funkgerät.',
+  appDescription_atisdscrx:
+    'Empfängt maritime DSC-Rufe auf Kanal 70: Notfall, Dringlichkeit, Absender und Position.',
+  appDescription_atisrx:
+    'Identifiziert Binnenschiffe anhand ihres ATIS-Signals.',
+  appDescription_beacon: 'Sendet eine konfigurierbare Funkbake.',
+  appDescription_beam:
+    'Überträgt einen Kanal zwischen kompatiblen Funkgeräten.',
+  appDescription_breakout: 'Kompakte Version des klassischen Arcade-Spiels.',
+  appDescription_broadcastfm: 'Empfängt UKW-Rundfunksender.',
+  appDescription_cwdecode: 'Decodiert Morsecode in Echtzeit.',
+  appDescription_cwkeyer:
+    'Morsegeber mit PTT- und Seitentasten des Funkgeräts.',
+  appDescription_cwmem:
+    'Gespeicherte Morse-Nachrichten aus CW Keyer oder CW USB senden.',
+  appDescription_cwmemedit:
+    'Rufzeichen und benutzerdefinierte Nachrichten für CW Mem bearbeiten.',
+  appDescription_cwqsoauto:
+    'Sendet und wiederholt automatisch 16 anpassbare Morse-Nachrichten für CW-Funkkontakte.',
+  appDescription_cwtrainer:
+    'Morse lernen und üben: freies Geben mit Live-Dekodierung, Hörübungen und Nachgeben gehörter Zeichen.',
+  appDescription_cwusb:
+    'Morsegeber für ein externes Paddle am USB-C-Anschluss.',
+  appDescription_cube3d: 'Animierte 3D-Grafikdemonstration.',
+  appDescription_epirb406:
+    'Analysiert und decodiert Frames von 406-MHz-Notfunkbaken.',
+  appDescription_flashmap:
+    'Zeigt die externe Flash-Belegung: Firmware-Slots, Apps, aktiven Status, Sicherheitsregister und Hex-Ansicht.',
+  appDescription_foxhunt: 'Unterstützt bei der Funkpeilung.',
+  appDescription_geonav:
+    'Azimut, Entfernung und Elevation einer Radiosonde von der APRS-Position aus, aufgerufen aus Sonde M10, M20, MRZ oder RS41.',
+  appDescription_hellmaze:
+    'Ego-Shooter in einem von Dämonen heimgesuchten Labyrinth.',
+  appDescription_kisstnc:
+    'Das Funkgerät als KISS-TNC über USB-C: APRSdroid oder jeder KISS-Client, AFSK 1200 Baud.',
+  appDescription_minesweeper: 'Das klassische Minensuchspiel.',
+  appDescription_plasma: 'Animierte Plasma-Grafikdemonstration.',
+  appDescription_pocsagrx: 'Empfängt POCSAG-Pagernachrichten (DAPNET).',
+  appDescription_qrmap:
+    'Zeigt eine von einer anderen App empfangene Position als QR-Code an, der sich mit einem Smartphone scannen und auf einer Karte öffnen lässt.',
+  appDescription_rapidroll: 'Schnelles vertikales Arcade-Spiel.',
+  appDescription_resistor:
+    'Farbcode von Widerständen lesen: Wert, Toleranz und Temperaturkoeffizient (3 bis 6 Ringe).',
+  appDescription_scan406:
+    'Durchsucht alle Cospas-Sarsat-Kanäle bei 406 MHz und übergibt erkannte Bakenbursts der ersten Generation an EPIRB 406.',
+  appDescription_sigfinder: 'Ermittelt Richtung und Stärke eines Signals.',
+  appDescription_snake: 'Das klassische Snake für die Funkgerätetastatur.',
+  appDescription_sokoban: 'Das klassische Kistenschiebe-Puzzlespiel.',
+  appDescription_sondem10:
+    'Decodiert Meteomodem-M10-Radiosonden: ID, Position, Höhe und Temperatur.',
+  appDescription_sondem20:
+    'Decodiert Meteomodem-M20-Radiosonden: ID, Position, Höhe und Temperatur.',
+  appDescription_sondemrz:
+    'Decodiert MRZ-N1-/MP3-H1-Radiosonden: ID, Position, Höhe, Temperatur, Luftfeuchtigkeit, Geschwindigkeit und Kurs.',
+  appDescription_sonders41:
+    'Decodiert Vaisala-RS41-Radiosonden: ID, Position, Höhe, Vertikalgeschwindigkeit und Satellitenzahl.',
+  appDescription_spaceimpact: 'Seitlich scrollendes Weltraum-Arcade-Spiel.',
+  appDescription_spectrum3d: 'Experimentelle 3D-Spektrumanzeige.',
+  appDescription_sstv: 'Empfängt SSTV-Bilder auf dem Funkgerätedisplay.',
+  appDescription_systeminfo:
+    'Zeigt Informationen zu Firmware, Speicher und Gerät.',
+  appDescription_tetris: 'Das klassische Spiel mit fallenden Blöcken.',
+  appDescription_tonecall:
+    'Sendet konfigurierbare ZVEI- oder CCIR-Selektivrufsequenzen.',
+  appDescription_other: 'Overlay-App für F4HWN Labs.',
 };
