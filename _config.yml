@@ -41,6 +41,9 @@ exclude:
   - README.md
   - .github
 
-# Include any special files if needed
-# include:
-#   - somefile.txt
+# Include special files and folders needed for SPAs
+include:
+  - UVStudio
+  - UVTools
+  - uvtools2
+  - k5viewer
