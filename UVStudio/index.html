@@ -1576,6 +1576,39 @@
                 <button id="appsRefreshBtn" class="slots-refresh">
                   <span data-i18n="appsRefresh">Refresh apps</span>
                 </button>
+                <details class="app-local-install app-submit" id="appSubmit">
+                  <summary data-i18n="appSubmit">Propose an app from Community</summary>
+                  <form class="app-local-install-body app-submit-body" id="appSubmitForm">
+                    <label>
+                      <span data-i18n="appSubmitFile">App file</span>
+                      <input type="file" id="appSubmitFile" accept=".app" />
+                    </label>
+                    <label>
+                      <span data-i18n="appSubmitAuthor">Author</span>
+                      <input type="text" id="appSubmitAuthor" />
+                    </label>
+                    <label>
+                      <span data-i18n="appSubmitCategory">Category</span>
+                      <input type="text" id="appSubmitCategory" />
+                    </label>
+                    <label>
+                      <span data-i18n="appSubmitDescription">Description</span>
+                      <textarea id="appSubmitDescription"></textarea>
+                    </label>
+                    <label>
+                      <span data-i18n="appSubmitSource">Source code URL</span>
+                      <input type="url" id="appSubmitSource" />
+                    </label>
+                    <label>
+                      <span data-i18n="appSubmitCapture">Screen capture</span>
+                      <button type="button" id="appSubmitCapture" data-i18n="appSubmitCapture">Capture</button>
+                    </label>
+                    <label id="appSubmitPreview" data-i18n="appSubmitPreview">Preview</label>
+                    <button type="button" id="appSubmitSend" data-i18n="appSubmitSend">Send proposal</button>
+                    <button type="button" id="appSubmitSignIn" data-i18n="appSubmitSignIn">Sign in with GitHub</button>
+                    <button type="button" id="appSubmitPaste" data-i18n="appSubmitPaste">Paste template</button>
+                  </form>
+                </details>
               </section>
               <section
                 class="section firmware-catalog app-catalog"
@@ -2215,7 +2248,9 @@
     <script src="js/firmware-package.js?v=6"></script>
     <script src="js/flash.js?v=106"></script>
     <script src="js/flash-catalog.js?v=18"></script>
+    <script src="js/app-screens.js?v=1"></script>
     <script src="js/app-catalog.js?v=5"></script>
+    <script src="js/app-submit.js?v=1"></script>
     <script src="js/studio.js?v=18"></script>
     <script src="js/studio-flash-counter.js?v=2"></script>
   </body>
