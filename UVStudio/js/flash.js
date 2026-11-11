@@ -914,6 +914,8 @@
     radioConnected: () => Boolean(port && writer && toolsSerial.isOwner()),
     captureScreen: captureRadioScreen,
     radioFirmwareName: () => appCurrentFirmwareName,
+    // ABI major of the connected firmware (used by app-submit for validation).
+    radioFirmwareAbiMajor: () => appFirmwareAbiMajor(connectedFirmwareName),
   });
 
   function updateFlashButton() {
@@ -4598,6 +4600,15 @@
     const version = String(name || '').match(/\bv?(\d+(?:\.\d+){1,2})\b/i)?.[1];
     if (!version) return '';
     return version.split('.').concat('0', '0').slice(0, 3).join('.');
+  }
+
+  // ABI major of the connected firmware. Firmware v7.x+ uses ABI 2; older
+  // generations (v6.x and below) use ABI 1. When the name is unknown or no
+  // version can be parsed, default to ABI 1 (the historical F4HWN ABI).
+  function appFirmwareAbiMajor(deviceInfoName) {
+    const version = appFirmwareVersionFromName(deviceInfoName);
+    if (!version) return 1;
+    return appCompareVersions(version, '7.0.0') >= 0 ? 2 : 1;
   }
 
   function appSlotCountForFirmware(name) {
