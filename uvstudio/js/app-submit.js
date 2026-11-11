@@ -378,7 +378,18 @@
       setFileName(fileName, fileLabel, file, 'fileNoFile');
       if (file) {
         const bytes = new Uint8Array(await file.arrayBuffer());
-        let { app, error } = checkApp(bytes);
+        // Use the connected firmware's ABI when the radio is attached, so apps
+        // built for ApeX Labs (ABI 2) are not rejected against the hardcoded
+        // FIRMWARE profile (ABI 1). Falls back to FIRMWARE when offline.
+        let fw = FIRMWARE;
+        const flash = window.UVStudioFlash;
+        if (flash && typeof flash.radioFirmwareAbiMajor === 'function') {
+          const abi = flash.radioFirmwareAbiMajor();
+          if (abi !== FIRMWARE.abiMajor) {
+            fw = { ...FIRMWARE, abiMajor: abi };
+          }
+        }
+        let { app, error } = checkApp(bytes, fw);
         if (
           app &&
           catalog &&
