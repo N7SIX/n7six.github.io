@@ -208,6 +208,13 @@ test('merges only ApeX builds and supports release asset URLs', () => {
   assert.deepEqual(mergeApexFiles(null), []);
 });
 
+test('routes ApeXLabs Edition builds to their own catalog group', () => {
+  assert.equal(parseFirmwareName('n7six.ApeXLabs-k1.v7.6.13.bin').brand, 'apexLabs');
+  assert.equal(parseFirmwareName('n7six.ApeXLabs-k1.v7.6.13.bin').group, 'apexLabs');
+  assert.equal(parseFirmwareName('n7six.ApeXLabs-k5v3.v7.6.13.bin').model, 'K5v3');
+  assert.equal(parseFirmwareName('n7six.ApeX-k1.v7.6.12.bin').brand, 'apex');
+});
+
 test('routes each stable F4HWN edition to its own catalog section', () => {
   assert.equal(parseFirmwareName('f4hwn.fusion.v5.8.0.bin').group, 'fusion');
   assert.equal(
@@ -326,6 +333,7 @@ test('groups offered entries newest-first and drops everything else', () => {
       'labs',
       'development',
       'apex',
+      'apexLabs',
       'fusion_k1',
       'fusion_k5v3',
       'stock',

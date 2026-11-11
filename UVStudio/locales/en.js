@@ -1,6 +1,7 @@
 window.UVSTUDIO_LOCALES = window.UVSTUDIO_LOCALES || {};
 window.UVSTUDIO_LOCALES.en = {
   flash_catalog_label: 'Official F4HWN firmware',
+  apex_labs_firmware: 'ApeXLabs Edition',
   official_n7six_firmware: 'Official N7SIX firmware',
   flash_catalog_placeholder: '— Select a version —',
   flash_catalog_or: 'or load a local file',

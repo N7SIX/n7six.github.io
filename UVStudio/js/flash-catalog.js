@@ -40,6 +40,11 @@
     `https://api.github.com/repos/${APEX_REPO}/contents/${ARCHIVE_PATH}` +
     `?ref=${encodeURIComponent(STABLE_BRANCH)}`;
   const APEX_RELEASES_API_URL = `https://api.github.com/repos/${APEX_REPO}/releases/latest`;
+  const APEX_LABS_REPO = 'N7SIX/UV-K1Series_ApeXLabs-Edition_v7.6.0';
+  const APEX_LABS_API_URL =
+    `https://api.github.com/repos/${APEX_LABS_REPO}/contents/${ARCHIVE_PATH}` +
+    `?ref=${encodeURIComponent(STABLE_BRANCH)}`;
+  const APEX_LABS_RELEASES_API_URL = `https://api.github.com/repos/${APEX_LABS_REPO}/releases/latest`;
   // Only current firmwares are offered: v5.0 and newer, no beta or SA818 builds.
   const MIN_MAJOR_VERSION = 5;
   // Multiboot first ships with v6; older images cannot return to the slot menu.
@@ -53,6 +58,7 @@
     'labs',
     'development',
     'apex',
+    'apexLabs',
     'fusion_k1',
     'fusion_k5v3',
     'stock',
@@ -64,6 +70,7 @@
     labs: 'F4HWN Labs',
     development: 'F4HWN Fusion (dev, unstable)',
     apex: 'ApeX Edition',
+    apexLabs: 'ApeXLabs Edition',
     fusion_k1: 'F4HWN Fusion · K1',
     fusion_k5v3: 'F4HWN Fusion · K5v3',
     stock: 'Quansheng (stock)',
@@ -92,6 +99,27 @@
       brand = 'f4hwn';
       group = 'development';
     } else if (lower.startsWith('n7six')) {
+      // ApeXLabs Edition builds, e.g. n7six.ApeXLabs-k1.v7.6.13.bin.
+      const apexLabsMatch = lower.match(
+        /^n7six[._-]apexLabs(?:[._-](k1|k5v3))?(?:[._-].*)?\.bin$/i,
+      );
+      if (apexLabsMatch) {
+        brand = 'apexLabs';
+        group = 'apexLabs';
+        model =
+          apexLabsMatch[1] === 'k1' ? 'K1' : apexLabsMatch[1] === 'k5v3' ? 'K5v3' : '';
+        return {
+          name,
+          brand,
+          group,
+          model,
+          version,
+          isBeta,
+          isSa818,
+          isDevelopment,
+        };
+      }
+      // ApeX Edition builds, e.g. n7six.ApeX-k1.v7.6.12.bin.
       const apexMatch = lower.match(
         /^n7six[._-]apex(?:[._-](k1|k5v3))?(?:[._-].*)?\.bin$/,
       );
@@ -220,6 +248,15 @@
       .map(normalizeFile);
   }
 
+  function mergeApexLabsFiles(apexLabsFiles) {
+    return (Array.isArray(apexLabsFiles) ? apexLabsFiles : [])
+      .filter((file) => {
+        const parsed = parseFirmwareName(file && file.name);
+        return Boolean(parsed) && parsed.brand === 'apexLabs';
+      })
+      .map(normalizeFile);
+  }
+
   // Group GitHub file entries ({ name, size, download_url }) into an ordered map
   // of firmware families, newest version first within each family.
   function categorize(files) {
@@ -246,7 +283,7 @@
   // Compact option label, e.g. "v5.7.0 · 58 KB" or "K1 v7.03.01 · 61 KB".
   function formatOptionLabel(entry) {
     const parts = [];
-    if ((entry.group === 'stock' || entry.group === 'apex') && entry.model)
+    if ((entry.group === 'stock' || entry.group === 'apex' || entry.group === 'apexLabs') && entry.model)
       parts.push(entry.model);
     // Kept in English like the other technical tags (stable / dev / stock).
     if (entry.isDevelopment) parts.push('⚠ Development · unstable');
@@ -274,13 +311,15 @@
   function boot() {
     const apexSelect = document.getElementById('apexFirmwareCatalogSelect');
     const apexSection = document.getElementById('apexFirmwareCatalogSection');
+    const apexLabsSelect = document.getElementById('apexLabsFirmwareCatalogSelect');
+    const apexLabsSection = document.getElementById('apexLabsFirmwareCatalogSection');
     const select = document.getElementById('firmwareCatalogSelect');
     const section = document.getElementById('firmwareCatalogSection');
     const divider = document.getElementById('firmwareCatalogOr');
     const slotSelect = document.getElementById('slotFirmwareCatalogSelect');
     const slotSection = document.getElementById('slotFirmwareCatalogSection');
     const slotDivider = document.getElementById('slotFirmwareCatalogOr');
-    const selects = [apexSelect, select, slotSelect].filter(Boolean);
+    const selects = [apexSelect, apexLabsSelect, select, slotSelect].filter(Boolean);
     if (!selects.length) return; // Catalog markup absent.
 
     // Purge the obsolete persistent listing cache written by earlier versions.
@@ -304,6 +343,7 @@
 
     function showCatalog(flashVisible, slotVisible = flashVisible) {
       if (apexSection) apexSection.hidden = !flashVisible;
+      if (apexLabsSection) apexLabsSection.hidden = !flashVisible;
       if (section) section.hidden = !flashVisible;
       if (divider) divider.hidden = !flashVisible;
       if (slotSection) slotSection.hidden = !slotVisible;
@@ -344,6 +384,36 @@
         if (response.ok) {
           const release = await response.json();
           releaseFiles = mergeApexFiles(release.assets || []);
+        }
+      } catch (error) {
+        releaseFiles = [];
+      }
+
+      const seen = new Set();
+      return archiveFiles.concat(releaseFiles).filter((file) => {
+        if (seen.has(file.name)) return false;
+        seen.add(file.name);
+        return true;
+      });
+    }
+
+    async function fetchApexLabsFiles() {
+      let archiveFiles = [];
+      try {
+        const response = await fetch(APEX_LABS_API_URL, { cache: 'no-cache' });
+        if (response.ok) archiveFiles = mergeApexLabsFiles(await response.json());
+      } catch (error) {
+        archiveFiles = [];
+      }
+
+      let releaseFiles = [];
+      try {
+        const response = await fetch(APEX_LABS_RELEASES_API_URL, {
+          cache: 'no-cache',
+        });
+        if (response.ok) {
+          const release = await response.json();
+          releaseFiles = mergeApexLabsFiles(release.assets || []);
         }
       } catch (error) {
         releaseFiles = [];
@@ -400,14 +470,19 @@
       return isOffered(entry) && entry.brand === 'apex';
     }
 
+    function isApexLabsOffered(entry) {
+      return isOffered(entry) && entry.brand === 'apexLabs';
+    }
+
     function isFlashOffered(entry) {
-      return isOffered(entry) && entry.brand !== 'apex';
+      return isOffered(entry) && entry.brand !== 'apex' && entry.brand !== 'apexLabs';
     }
 
     function render() {
-      if (!groups) return { apex: 0, flash: 0, slots: 0 };
+      if (!groups) return { apex: 0, apexLabs: 0, flash: 0, slots: 0 };
       return {
         apex: apexSelect ? renderSelect(apexSelect, isApexOffered) : 0,
+        apexLabs: apexLabsSelect ? renderSelect(apexLabsSelect, isApexLabsOffered) : 0,
         flash: select ? renderSelect(select, isFlashOffered) : 0,
         slots: slotSelect ? renderSelect(slotSelect, isSlotOffered) : 0,
       };
@@ -433,12 +508,14 @@
           throw new Error(`HTTP ${response.status}`);
         }
         const stableFiles = await response.json();
-        const [developmentFile, apexFiles] = await Promise.all([
+        const [developmentFile, apexFiles, apexLabsFiles] = await Promise.all([
           fetchDevelopmentFile(),
           fetchApexFiles(),
+          fetchApexLabsFiles(),
         ]);
         const files = mergeCatalogFiles(stableFiles, developmentFile).concat(
           apexFiles,
+          apexLabsFiles,
         );
         groups = categorize(files);
         const counts = render();
@@ -480,6 +557,13 @@
       }
     }
 
+    if (apexLabsSelect) {
+      apexLabsSelect.addEventListener('change', () => {
+        loadCatalogUrl(apexLabsSelect);
+        if (select && select.options.length) select.selectedIndex = 0;
+      });
+    }
+
     if (apexSelect) {
       apexSelect.addEventListener('change', () => {
         loadCatalogUrl(apexSelect);
@@ -514,7 +598,7 @@
     // Keep only one firmware source selected after choosing a local file.
     window.addEventListener('uvstudio:firmwareselect', (event) => {
       if (event.detail && event.detail.source === 'local') {
-        [apexSelect, select].forEach((catalogSelect) => {
+        [apexSelect, apexLabsSelect, select].forEach((catalogSelect) => {
           if (catalogSelect && catalogSelect.options.length) {
             catalogSelect.selectedIndex = 0;
           }
