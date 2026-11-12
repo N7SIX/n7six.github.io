@@ -15,7 +15,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const REPO = 'armel/uv-k1-k5v3-firmware-custom';
+  const REPO = 'N7SIX/UV-K1Series_ApeX-Edition_v7.6.0';
   // main, or the development branch when the hidden developer switch is on.
   const BRANCH =
     typeof globalThis !== 'undefined' &&
