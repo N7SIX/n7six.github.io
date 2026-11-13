@@ -15,7 +15,12 @@ const {
   isSlotOffered,
   mergeCatalogFiles,
   mergeApexFiles,
+  dedupeByName,
+  publishedManifestFiles,
 } = catalog;
+const {
+  selectFirmwareAssets,
+} = require('../../scripts/sync-n7six-firmware.js');
 
 // Real filenames from armel/uv-k1-k5v3-firmware-custom/archive.
 const SAMPLE = [
@@ -109,6 +114,7 @@ test('classifies the general Fusion line and its variants', () => {
     group: 'fusion',
     model: '',
     version: '5.7.0',
+    revision: '',
     isBeta: false,
     isSa818: false,
     isDevelopment: false,
@@ -182,6 +188,7 @@ test('routes N7SIX ApeX firmware to its own catalog group', () => {
     group: 'apex',
     model: 'K1',
     version: '7.6.11',
+    revision: '',
     isBeta: false,
     isSa818: false,
     isDevelopment: false,
@@ -208,10 +215,106 @@ test('merges only ApeX builds and supports release asset URLs', () => {
   assert.deepEqual(mergeApexFiles(null), []);
 });
 
+test('keeps N7SIX revisions distinct and orders them within a version', () => {
+  const entries = categorize(
+    [
+      'n7six.ApeX-k1.v7.6.10.bin',
+      'n7six.ApeX-k1.v7.6.10D.bin',
+      'n7six.ApeX-k1.v7.6.10A.bin',
+      'n7six.ApeX-k1.v7.6.5br5.bin',
+      'n7six.ApeX-k1.v7.6.5br10.bin',
+      'n7six.ApeX-k1.v7.6.11.bin',
+    ].map((name) => ({ name, size: 1024, download_url: `https://x/${name}` })),
+  ).get('apex');
+  assert.deepEqual(entries.map(formatOptionLabel), [
+    'K1 v7.6.11 · 1 KB',
+    'K1 v7.6.10D · 1 KB',
+    'K1 v7.6.10A · 1 KB',
+    'K1 v7.6.10 · 1 KB',
+    'K1 v7.6.5br10 · 1 KB',
+    'K1 v7.6.5br5 · 1 KB',
+  ]);
+});
+
+test('resolves mirrored release manifests and prefers the first source', () => {
+  const files = publishedManifestFiles(
+    { files: [{ name: 'n7six.ApeX-k1.v7.6.12.bin', size: 5 }, null] },
+    new URL('https://n7six.github.io/UVStudio/firmware/n7six/manifest.json'),
+  );
+  assert.deepEqual(files, [
+    {
+      name: 'n7six.ApeX-k1.v7.6.12.bin',
+      size: 5,
+      download_url:
+        'https://n7six.github.io/UVStudio/firmware/n7six/n7six.ApeX-k1.v7.6.12.bin',
+    },
+  ]);
+  assert.deepEqual(publishedManifestFiles(null, 'https://x/'), []);
+  const merged = dedupeByName([files[0], { name: files[0].name, size: 9 }]);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].size, 5);
+});
+
+test('mirrors only published N7SIX firmware images from releases', () => {
+  const asset = (name, size = 1) => ({
+    name,
+    size,
+    browser_download_url: `https://x/${name}`,
+  });
+  const selected = selectFirmwareAssets([
+    {
+      tag_name: 'v7.6.13',
+      assets: [
+        asset('n7six.ApeXLabs-k1.v7.6.13.bin', 2),
+        asset('n7six.ApeXLabs-k1.v7.6.13.py'),
+      ],
+    },
+    {
+      tag_name: 'v7.6.12',
+      assets: [
+        asset('n7six.ApeXLabs-k1.v7.6.13.bin', 3),
+        asset('n7six.ApeX-k1.v7.6.12.bin'),
+        asset('n7six.ApeX-k1.v7.6.12.elf'),
+        asset('f4hwn.chirp.v6.1.0.py'),
+      ],
+    },
+    {
+      tag_name: 'v7.6.10D',
+      assets: [asset('n7six.ApeX-k1.v7.6.10D.bin')],
+    },
+    {
+      tag_name: 'v7.7.0',
+      prerelease: true,
+      assets: [asset('n7six.ApeX-k1.v7.7.0.bin')],
+    },
+    {
+      tag_name: 'v7.8.0',
+      draft: true,
+      assets: [asset('n7six.ApeX-k1.v7.8.0.bin')],
+    },
+  ]);
+  assert.deepEqual(
+    selected.map((file) => [file.name, file.size, file.tag]),
+    [
+      ['n7six.ApeXLabs-k1.v7.6.13.bin', 2, 'v7.6.13'],
+      ['n7six.ApeX-k1.v7.6.12.bin', 1, 'v7.6.12'],
+    ],
+  );
+});
+
 test('routes ApeXLabs Edition builds to their own catalog group', () => {
-  assert.equal(parseFirmwareName('n7six.ApeXLabs-k1.v7.6.13.bin').brand, 'apexLabs');
-  assert.equal(parseFirmwareName('n7six.ApeXLabs-k1.v7.6.13.bin').group, 'apexLabs');
-  assert.equal(parseFirmwareName('n7six.ApeXLabs-k5v3.v7.6.13.bin').model, 'K5v3');
+  assert.equal(
+    parseFirmwareName('n7six.ApeXLabs-k1.v7.6.13.bin').brand,
+    'apexLabs',
+  );
+  assert.equal(
+    parseFirmwareName('n7six.ApeXLabs-k1.v7.6.13.bin').group,
+    'apexLabs',
+  );
+  assert.equal(
+    parseFirmwareName('n7six.ApeXLabs-k5v3.v7.6.13.bin').model,
+    'K5v3',
+  );
   assert.equal(parseFirmwareName('n7six.ApeX-k1.v7.6.12.bin').brand, 'apex');
 });
 

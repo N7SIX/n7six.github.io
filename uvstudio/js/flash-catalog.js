@@ -39,12 +39,12 @@
   const APEX_API_URL =
     `https://api.github.com/repos/${APEX_REPO}/contents/${ARCHIVE_PATH}` +
     `?ref=${encodeURIComponent(STABLE_BRANCH)}`;
-  const APEX_RELEASES_API_URL = `https://api.github.com/repos/${APEX_REPO}/releases/latest`;
+  // Mirror of the N7SIX GitHub releases, refreshed by sync-n7six-firmware.yml.
+  const PUBLISHED_MANIFEST_PATH = 'firmware/n7six/manifest.json';
   const APEX_LABS_REPO = 'N7SIX/UV-K1Series_ApeXLabs-Edition_v7.6.0';
   const APEX_LABS_API_URL =
     `https://api.github.com/repos/${APEX_LABS_REPO}/contents/${ARCHIVE_PATH}` +
     `?ref=${encodeURIComponent(STABLE_BRANCH)}`;
-  const APEX_LABS_RELEASES_API_URL = `https://api.github.com/repos/${APEX_LABS_REPO}/releases/latest`;
   // Only current firmwares are offered: v5.0 and newer, no beta or SA818 builds.
   const MIN_MAJOR_VERSION = 5;
   // Multiboot first ships with v6; older images cannot return to the slot menu.
@@ -88,8 +88,12 @@
     const isBeta = /\.beta\b/.test(lower);
     const isSa818 = /\.sa818\b/.test(lower);
     const isDevelopment = lower === DEVELOPMENT_FILENAME;
-    const versionMatch = lower.match(/[._-]v(\d+(?:\.\d+)*)/);
+    // Optional trailing revision of N7SIX builds, e.g. v7.6.10D or v7.6.5br5.
+    const versionMatch = name.match(
+      /[._-]v(\d+(?:\.\d+)*)([a-z][a-z0-9]*)?(?=\.bin$|[._-])/i,
+    );
     const version = versionMatch ? versionMatch[1] : '';
+    const revision = versionMatch && versionMatch[2] ? versionMatch[2] : '';
 
     let brand;
     let group;
@@ -107,13 +111,18 @@
         brand = 'apexLabs';
         group = 'apexLabs';
         model =
-          apexLabsMatch[1] === 'k1' ? 'K1' : apexLabsMatch[1] === 'k5v3' ? 'K5v3' : '';
+          apexLabsMatch[1] === 'k1'
+            ? 'K1'
+            : apexLabsMatch[1] === 'k5v3'
+              ? 'K5v3'
+              : '';
         return {
           name,
           brand,
           group,
           model,
           version,
+          revision,
           isBeta,
           isSa818,
           isDevelopment,
@@ -160,10 +169,19 @@
       group,
       model,
       version,
+      revision,
       isBeta,
       isSa818,
       isDevelopment,
     };
+  }
+
+  // Within one version, a plain release precedes its revisions (A < B, br1 < br5).
+  function compareRevisionDesc(a, b) {
+    return String(b || '').localeCompare(String(a || ''), 'en', {
+      numeric: true,
+      sensitivity: 'base',
+    });
   }
 
   // Descending semantic comparison so v5.10.0 correctly outranks v5.9.0.
@@ -257,6 +275,29 @@
       .map(normalizeFile);
   }
 
+  // First occurrence wins, so list the preferred source first.
+  function dedupeByName(files) {
+    const seen = new Set();
+    return files.filter((file) => {
+      if (!file || seen.has(file.name)) return false;
+      seen.add(file.name);
+      return true;
+    });
+  }
+
+  // Turn the mirrored-release manifest into file entries with absolute URLs.
+  function publishedManifestFiles(manifest, baseUrl) {
+    const files =
+      manifest && Array.isArray(manifest.files) ? manifest.files : [];
+    return files
+      .filter((file) => file && typeof file.name === 'string')
+      .map((file) => ({
+        name: file.name,
+        size: file.size,
+        download_url: new URL(encodeURIComponent(file.name), baseUrl).href,
+      }));
+  }
+
   // Group GitHub file entries ({ name, size, download_url }) into an ordered map
   // of firmware families, newest version first within each family.
   function categorize(files) {
@@ -275,7 +316,11 @@
     });
 
     groups.forEach((list) =>
-      list.sort((a, b) => compareVersionDesc(a.version, b.version)),
+      list.sort(
+        (a, b) =>
+          compareVersionDesc(a.version, b.version) ||
+          compareRevisionDesc(a.revision, b.revision),
+      ),
     );
     return groups;
   }
@@ -283,11 +328,19 @@
   // Compact option label, e.g. "v5.7.0 · 58 KB" or "K1 v7.03.01 · 61 KB".
   function formatOptionLabel(entry) {
     const parts = [];
-    if ((entry.group === 'stock' || entry.group === 'apex' || entry.group === 'apexLabs') && entry.model)
+    if (
+      (entry.group === 'stock' ||
+        entry.group === 'apex' ||
+        entry.group === 'apexLabs') &&
+      entry.model
+    )
       parts.push(entry.model);
     // Kept in English like the other technical tags (stable / dev / stock).
     if (entry.isDevelopment) parts.push('⚠ Development · unstable');
-    else parts.push(entry.version ? `v${entry.version}` : entry.name);
+    else
+      parts.push(
+        entry.version ? `v${entry.version}${entry.revision || ''}` : entry.name,
+      );
     let label = parts.join(' ');
     if (Number.isFinite(entry.size))
       label += ` · ${Math.round(entry.size / 1024)} KB`;
@@ -304,6 +357,9 @@
     isSlotOffered,
     mergeCatalogFiles,
     mergeApexFiles,
+    mergeApexLabsFiles,
+    dedupeByName,
+    publishedManifestFiles,
   };
 
   // ========== BROWSER RUNTIME ==========
@@ -311,15 +367,21 @@
   function boot() {
     const apexSelect = document.getElementById('apexFirmwareCatalogSelect');
     const apexSection = document.getElementById('apexFirmwareCatalogSection');
-    const apexLabsSelect = document.getElementById('apexLabsFirmwareCatalogSelect');
-    const apexLabsSection = document.getElementById('apexLabsFirmwareCatalogSection');
+    const apexLabsSelect = document.getElementById(
+      'apexLabsFirmwareCatalogSelect',
+    );
+    const apexLabsSection = document.getElementById(
+      'apexLabsFirmwareCatalogSection',
+    );
     const select = document.getElementById('firmwareCatalogSelect');
     const section = document.getElementById('firmwareCatalogSection');
     const divider = document.getElementById('firmwareCatalogOr');
     const slotSelect = document.getElementById('slotFirmwareCatalogSelect');
     const slotSection = document.getElementById('slotFirmwareCatalogSection');
     const slotDivider = document.getElementById('slotFirmwareCatalogOr');
-    const selects = [apexSelect, apexLabsSelect, select, slotSelect].filter(Boolean);
+    const selects = [apexSelect, apexLabsSelect, select, slotSelect].filter(
+      Boolean,
+    );
     if (!selects.length) return; // Catalog markup absent.
 
     // Purge the obsolete persistent listing cache written by earlier versions.
@@ -367,64 +429,39 @@
       }
     }
 
-    async function fetchApexFiles() {
-      let archiveFiles = [];
+    async function fetchArchiveFiles(url) {
       try {
-        const response = await fetch(APEX_API_URL, { cache: 'no-cache' });
-        if (response.ok) archiveFiles = mergeApexFiles(await response.json());
+        const response = await fetch(url, { cache: 'no-cache' });
+        return response.ok ? await response.json() : [];
       } catch (error) {
-        archiveFiles = [];
+        return [];
       }
-
-      let releaseFiles = [];
-      try {
-        const response = await fetch(APEX_RELEASES_API_URL, {
-          cache: 'no-cache',
-        });
-        if (response.ok) {
-          const release = await response.json();
-          releaseFiles = mergeApexFiles(release.assets || []);
-        }
-      } catch (error) {
-        releaseFiles = [];
-      }
-
-      const seen = new Set();
-      return archiveFiles.concat(releaseFiles).filter((file) => {
-        if (seen.has(file.name)) return false;
-        seen.add(file.name);
-        return true;
-      });
     }
 
-    async function fetchApexLabsFiles() {
-      let archiveFiles = [];
+    // Published N7SIX releases are mirrored next to this page by a scheduled
+    // workflow: GitHub release downloads do not allow cross-origin fetches.
+    async function fetchPublishedFiles() {
       try {
-        const response = await fetch(APEX_LABS_API_URL, { cache: 'no-cache' });
-        if (response.ok) archiveFiles = mergeApexLabsFiles(await response.json());
+        const manifestUrl = new URL(PUBLISHED_MANIFEST_PATH, document.baseURI);
+        const response = await fetch(manifestUrl, { cache: 'no-cache' });
+        if (!response.ok) return [];
+        return publishedManifestFiles(await response.json(), manifestUrl);
       } catch (error) {
-        archiveFiles = [];
+        return [];
       }
+    }
 
-      let releaseFiles = [];
-      try {
-        const response = await fetch(APEX_LABS_RELEASES_API_URL, {
-          cache: 'no-cache',
-        });
-        if (response.ok) {
-          const release = await response.json();
-          releaseFiles = mergeApexLabsFiles(release.assets || []);
-        }
-      } catch (error) {
-        releaseFiles = [];
-      }
-
-      const seen = new Set();
-      return archiveFiles.concat(releaseFiles).filter((file) => {
-        if (seen.has(file.name)) return false;
-        seen.add(file.name);
-        return true;
-      });
+    async function fetchN7sixFiles() {
+      const [published, apexArchive, apexLabsArchive] = await Promise.all([
+        fetchPublishedFiles(),
+        fetchArchiveFiles(APEX_API_URL),
+        fetchArchiveFiles(APEX_LABS_API_URL),
+      ]);
+      return dedupeByName(
+        [published, apexArchive, apexLabsArchive].flatMap((list) =>
+          mergeApexFiles(list).concat(mergeApexLabsFiles(list)),
+        ),
+      );
     }
 
     // Build the menu and return how many firmware options it holds.
@@ -475,14 +512,18 @@
     }
 
     function isFlashOffered(entry) {
-      return isOffered(entry) && entry.brand !== 'apex' && entry.brand !== 'apexLabs';
+      return (
+        isOffered(entry) && entry.brand !== 'apex' && entry.brand !== 'apexLabs'
+      );
     }
 
     function render() {
       if (!groups) return { apex: 0, apexLabs: 0, flash: 0, slots: 0 };
       return {
         apex: apexSelect ? renderSelect(apexSelect, isApexOffered) : 0,
-        apexLabs: apexLabsSelect ? renderSelect(apexLabsSelect, isApexLabsOffered) : 0,
+        apexLabs: apexLabsSelect
+          ? renderSelect(apexLabsSelect, isApexLabsOffered)
+          : 0,
         flash: select ? renderSelect(select, isFlashOffered) : 0,
         slots: slotSelect ? renderSelect(slotSelect, isSlotOffered) : 0,
       };
@@ -508,14 +549,12 @@
           throw new Error(`HTTP ${response.status}`);
         }
         const stableFiles = await response.json();
-        const [developmentFile, apexFiles, apexLabsFiles] = await Promise.all([
+        const [developmentFile, n7sixFiles] = await Promise.all([
           fetchDevelopmentFile(),
-          fetchApexFiles(),
-          fetchApexLabsFiles(),
+          fetchN7sixFiles(),
         ]);
         const files = mergeCatalogFiles(stableFiles, developmentFile).concat(
-          apexFiles,
-          apexLabsFiles,
+          n7sixFiles,
         );
         groups = categorize(files);
         const counts = render();

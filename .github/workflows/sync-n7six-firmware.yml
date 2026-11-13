@@ -1,0 +1,40 @@
+name: Sync N7SIX firmware
+
+# Mirrors firmware published in the N7SIX firmware repositories so the
+# "Official N7SIX firmware" list in UV Studio stays up to date.
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+  repository_dispatch:
+    types: [n7six-firmware-published]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-n7six-firmware
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Mirror published firmware
+        run: node scripts/sync-n7six-firmware.js
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Commit changes
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A UVStudio/firmware/n7six
+          if git diff --cached --quiet; then
+            echo 'Firmware list is already up to date.'
+          else
+            git commit -m 'Update N7SIX firmware list'
+            git push
+          fi

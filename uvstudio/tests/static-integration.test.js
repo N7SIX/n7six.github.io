@@ -152,7 +152,7 @@ test('offers separate Official N7SIX and F4HWN firmware pickers', () => {
     flashCatalogSource,
     /const APEX_REPO = 'N7SIX\/UV-K1Series_ApeX-Edition_v7\.6\.0'/,
   );
-  assert.match(flashCatalogSource, /function fetchApexFiles\(\)/);
+  assert.match(flashCatalogSource, /function fetchN7sixFiles\(\)/);
   assert.match(flashCatalogSource, /function isApexOffered\(entry\)/);
 });
 
