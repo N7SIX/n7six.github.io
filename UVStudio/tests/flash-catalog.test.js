@@ -256,12 +256,13 @@ test('resolves mirrored release manifests and prefers the first source', () => {
   assert.equal(merged[0].size, 5);
 });
 
-test('shows N7SIX releases newest first across ApeX editions', async () => {
+test('groups N7SIX releases by edition and sorts each newest first', async () => {
   const manifest = {
     files: [
       { name: 'n7six.ApeX-k1.v7.6.11.bin', size: 110196 },
       { name: 'n7six.ApeX-k1.v7.6.12.bin', size: 110340 },
       { name: 'n7six.ApeXLabs-k1.v7.6.13.bin', size: 119856 },
+      { name: 'n7six.ApeXLabs-k1.v7.6.10.bin', size: 119856 },
       { name: 'n7six.ApeX-k1.v7.6.9.bin', size: 110196 },
       { name: 'n7six.ApeX-k1.v7.6.100.bin', size: 110196 },
     ],
@@ -337,17 +338,24 @@ test('shows N7SIX releases newest first across ApeX editions', async () => {
   await loaded;
 
   assert.equal(section.hidden, false);
-  const options = picker.options.filter((option) => option.value);
+  const groups = picker.children.filter((child) => child.label);
   assert.deepEqual(
-    options.map((option) => option.textContent),
+    groups.map((group) => group.label),
+    ['ApeX Edition', 'ApeXLabs Edition'],
+  );
+  assert.deepEqual(
+    groups.map((group) => group.children.map((option) => option.textContent)),
     [
-      'ApeX Edition · K1 v7.6.100 · 108 KB',
-      'ApeXLabs Edition · K1 v7.6.13 · 117 KB',
-      'ApeX Edition · K1 v7.6.12 · 108 KB',
-      'ApeX Edition · K1 v7.6.11 · 108 KB',
-      'ApeX Edition · K1 v7.6.9 · 108 KB',
+      [
+        'K1 v7.6.100 · 108 KB',
+        'K1 v7.6.12 · 108 KB',
+        'K1 v7.6.11 · 108 KB',
+        'K1 v7.6.9 · 108 KB',
+      ],
+      ['K1 v7.6.13 · 117 KB', 'K1 v7.6.10 · 117 KB'],
     ],
   );
+  const options = picker.options.filter((option) => option.value);
   const labs = options.find((option) => option.value.includes('ApeXLabs'));
   picker.value = labs.value;
   picker.change();

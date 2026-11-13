@@ -457,11 +457,7 @@
     }
 
     // Build the menu and return how many firmware options it holds.
-    function renderSelect(
-      targetSelect,
-      entryFilter = () => true,
-      sortAcrossGroups = false,
-    ) {
+    function renderSelect(targetSelect, entryFilter = () => true) {
       const previous = targetSelect.value;
       targetSelect.textContent = '';
 
@@ -473,33 +469,21 @@
       targetSelect.appendChild(placeholder);
 
       let optionCount = 0;
-      function appendOption(parent, entry, showGroup) {
-        const option = document.createElement('option');
-        option.value = entry.url;
-        option.textContent =
-          (showGroup ? `${GROUP_LABELS[entry.group]} · ` : '') +
-          formatOptionLabel(entry);
-        parent.appendChild(option);
-        optionCount += 1;
-      }
+      GROUP_ORDER.forEach((id) => {
+        const entries = (groups.get(id) || []).filter(entryFilter);
+        if (!entries.length) return;
 
-      if (sortAcrossGroups) {
-        const entries = GROUP_ORDER.flatMap((id) =>
-          (groups.get(id) || []).filter(entryFilter),
-        );
-        entries.sort(compareFirmwareDesc);
-        entries.forEach((entry) => appendOption(targetSelect, entry, true));
-      } else {
-        GROUP_ORDER.forEach((id) => {
-          const entries = (groups.get(id) || []).filter(entryFilter);
-          if (!entries.length) return;
-
-          const optgroup = document.createElement('optgroup');
-          optgroup.label = GROUP_LABELS[id];
-          entries.forEach((entry) => appendOption(optgroup, entry, false));
-          targetSelect.appendChild(optgroup);
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = GROUP_LABELS[id];
+        entries.forEach((entry) => {
+          const option = document.createElement('option');
+          option.value = entry.url;
+          option.textContent = formatOptionLabel(entry);
+          optgroup.appendChild(option);
+          optionCount += 1;
         });
-      }
+        targetSelect.appendChild(optgroup);
+      });
 
       // Preserve the current choice across a re-render (e.g. language change).
       if (
@@ -527,7 +511,7 @@
     function render() {
       if (!groups) return { apex: 0, flash: 0, slots: 0 };
       return {
-        apex: apexSelect ? renderSelect(apexSelect, isApexOffered, true) : 0,
+        apex: apexSelect ? renderSelect(apexSelect, isApexOffered) : 0,
         flash: select ? renderSelect(select, isFlashOffered) : 0,
         slots: slotSelect ? renderSelect(slotSelect, isSlotOffered) : 0,
       };
