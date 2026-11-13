@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const test = require('node:test');
+const vm = require('node:vm');
 
 const catalog = require('../js/flash-catalog.js');
 const {
@@ -253,6 +254,99 @@ test('resolves mirrored release manifests and prefers the first source', () => {
   const merged = dedupeByName([files[0], { name: files[0].name, size: 9 }]);
   assert.equal(merged.length, 1);
   assert.equal(merged[0].size, 5);
+});
+
+test('shows ApeX and ApeXLabs releases in the Official N7SIX picker', async () => {
+  const manifest = {
+    files: [
+      { name: 'n7six.ApeX-k1.v7.6.11.bin', size: 110196 },
+      { name: 'n7six.ApeX-k1.v7.6.12.bin', size: 110340 },
+      { name: 'n7six.ApeXLabs-k1.v7.6.13.bin', size: 119856 },
+    ],
+  };
+  const makeElement = () => ({
+    children: [],
+    hidden: true,
+    value: '',
+    appendChild(child) {
+      this.children.push(child);
+    },
+    addEventListener(type, handler) {
+      this[type] = handler;
+    },
+    get options() {
+      return this.children.flatMap((child) =>
+        child.children.length ? child.children : [child],
+      );
+    },
+  });
+  const picker = makeElement();
+  const section = makeElement();
+  const elements = {
+    apexFirmwareCatalogSelect: picker,
+    apexFirmwareCatalogSection: section,
+  };
+  const handlers = {};
+  let loadedUrl;
+  let resolveLoaded;
+  const loaded = new Promise((resolve) => {
+    resolveLoaded = resolve;
+  });
+  const context = {
+    module: { exports: {} },
+    URL,
+    CustomEvent: class {
+      constructor(type, options) {
+        this.type = type;
+        this.detail = options.detail;
+      }
+    },
+    document: {
+      readyState: 'loading',
+      baseURI: 'https://n7six.github.io/UVStudio/',
+      getElementById: (id) => elements[id] || null,
+      createElement: makeElement,
+      addEventListener() {},
+    },
+    window: {
+      UVStudioFlash: {
+        loadFirmwareFromURL(url) {
+          loadedUrl = url;
+        },
+      },
+      addEventListener(type, handler) {
+        handlers[type] = handler;
+      },
+      dispatchEvent(event) {
+        if (event.type === 'uvstudio:slotcatalogversions') resolveLoaded();
+      },
+    },
+    fetch: async (url) => ({
+      ok: true,
+      json: async () => (String(url).endsWith('manifest.json') ? manifest : []),
+    }),
+  };
+  vm.runInNewContext(
+    fs.readFileSync(require.resolve('../js/flash-catalog.js'), 'utf8'),
+    context,
+  );
+  context.module.exports.boot();
+  handlers['uvstudio:toolviewchange']({ detail: { view: 'flash' } });
+  await loaded;
+
+  assert.equal(section.hidden, false);
+  const options = picker.options.filter((option) => option.value);
+  assert.deepEqual(
+    options.map((option) => option.textContent),
+    ['K1 v7.6.12 · 108 KB', 'K1 v7.6.11 · 108 KB', 'K1 v7.6.13 · 117 KB'],
+  );
+  const labs = options.find((option) => option.value.includes('ApeXLabs'));
+  picker.value = labs.value;
+  picker.change();
+  assert.equal(
+    loadedUrl,
+    'https://n7six.github.io/UVStudio/firmware/n7six/n7six.ApeXLabs-k1.v7.6.13.bin',
+  );
 });
 
 test('mirrors only published N7SIX firmware images from releases', () => {

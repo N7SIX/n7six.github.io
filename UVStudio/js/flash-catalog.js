@@ -367,21 +367,13 @@
   function boot() {
     const apexSelect = document.getElementById('apexFirmwareCatalogSelect');
     const apexSection = document.getElementById('apexFirmwareCatalogSection');
-    const apexLabsSelect = document.getElementById(
-      'apexLabsFirmwareCatalogSelect',
-    );
-    const apexLabsSection = document.getElementById(
-      'apexLabsFirmwareCatalogSection',
-    );
     const select = document.getElementById('firmwareCatalogSelect');
     const section = document.getElementById('firmwareCatalogSection');
     const divider = document.getElementById('firmwareCatalogOr');
     const slotSelect = document.getElementById('slotFirmwareCatalogSelect');
     const slotSection = document.getElementById('slotFirmwareCatalogSection');
     const slotDivider = document.getElementById('slotFirmwareCatalogOr');
-    const selects = [apexSelect, apexLabsSelect, select, slotSelect].filter(
-      Boolean,
-    );
+    const selects = [apexSelect, select, slotSelect].filter(Boolean);
     if (!selects.length) return; // Catalog markup absent.
 
     // Purge the obsolete persistent listing cache written by earlier versions.
@@ -405,7 +397,6 @@
 
     function showCatalog(flashVisible, slotVisible = flashVisible) {
       if (apexSection) apexSection.hidden = !flashVisible;
-      if (apexLabsSection) apexLabsSection.hidden = !flashVisible;
       if (section) section.hidden = !flashVisible;
       if (divider) divider.hidden = !flashVisible;
       if (slotSection) slotSection.hidden = !slotVisible;
@@ -504,11 +495,10 @@
     }
 
     function isApexOffered(entry) {
-      return isOffered(entry) && entry.brand === 'apex';
-    }
-
-    function isApexLabsOffered(entry) {
-      return isOffered(entry) && entry.brand === 'apexLabs';
+      return (
+        isOffered(entry) &&
+        (entry.brand === 'apex' || entry.brand === 'apexLabs')
+      );
     }
 
     function isFlashOffered(entry) {
@@ -518,12 +508,9 @@
     }
 
     function render() {
-      if (!groups) return { apex: 0, apexLabs: 0, flash: 0, slots: 0 };
+      if (!groups) return { apex: 0, flash: 0, slots: 0 };
       return {
         apex: apexSelect ? renderSelect(apexSelect, isApexOffered) : 0,
-        apexLabs: apexLabsSelect
-          ? renderSelect(apexLabsSelect, isApexLabsOffered)
-          : 0,
         flash: select ? renderSelect(select, isFlashOffered) : 0,
         slots: slotSelect ? renderSelect(slotSelect, isSlotOffered) : 0,
       };
@@ -596,13 +583,6 @@
       }
     }
 
-    if (apexLabsSelect) {
-      apexLabsSelect.addEventListener('change', () => {
-        loadCatalogUrl(apexLabsSelect);
-        if (select && select.options.length) select.selectedIndex = 0;
-      });
-    }
-
     if (apexSelect) {
       apexSelect.addEventListener('change', () => {
         loadCatalogUrl(apexSelect);
@@ -637,7 +617,7 @@
     // Keep only one firmware source selected after choosing a local file.
     window.addEventListener('uvstudio:firmwareselect', (event) => {
       if (event.detail && event.detail.source === 'local') {
-        [apexSelect, apexLabsSelect, select].forEach((catalogSelect) => {
+        [apexSelect, select].forEach((catalogSelect) => {
           if (catalogSelect && catalogSelect.options.length) {
             catalogSelect.selectedIndex = 0;
           }
