@@ -341,18 +341,18 @@ test('groups N7SIX releases by edition and sorts each newest first', async () =>
   const groups = picker.children.filter((child) => child.label);
   assert.deepEqual(
     groups.map((group) => group.label),
-    ['ApeX Edition', 'ApeXLabs Edition'],
+    ['ApeXLabs Edition', 'ApeX Edition'],
   );
   assert.deepEqual(
     groups.map((group) => group.children.map((option) => option.textContent)),
     [
+      ['K1 v7.6.13 · 117 KB', 'K1 v7.6.10 · 117 KB'],
       [
         'K1 v7.6.100 · 108 KB',
         'K1 v7.6.12 · 108 KB',
         'K1 v7.6.11 · 108 KB',
         'K1 v7.6.9 · 108 KB',
       ],
-      ['K1 v7.6.13 · 117 KB', 'K1 v7.6.10 · 117 KB'],
     ],
   );
   const options = picker.options.filter((option) => option.value);
@@ -545,8 +545,8 @@ test('groups offered entries newest-first and drops everything else', () => {
       'transfer',
       'labs',
       'development',
-      'apex',
       'apexLabs',
+      'apex',
       'fusion_k1',
       'fusion_k5v3',
       'stock',

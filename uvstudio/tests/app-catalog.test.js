@@ -57,11 +57,11 @@ test('lists app files alphabetically and ignores unrelated archive entries', () 
 test('points every official app to its manual', () => {
   assert.equal(
     catalog.appManualURL('cwdecode'),
-    'https://github.com/armel/uv-k1-k5v3-firmware-custom/wiki/App-CW-Decode',
+    'https://github.com/N7SIX/UV-K1Series_ApeX-Edition_v7.6.0/wiki/App-CW-Decode',
   );
   assert.equal(
     catalog.appManualURL('broadcastfm'),
-    'https://github.com/armel/uv-k1-k5v3-firmware-custom/wiki/FM-broadcast-radio-receiver',
+    'https://github.com/N7SIX/UV-K1Series_ApeX-Edition_v7.6.0/wiki/FM-broadcast-radio-receiver',
   );
   assert.match(
     catalog.appManualURL('scan406'),
@@ -221,7 +221,7 @@ test('adds presentation metadata without changing the app binary format', () => 
 test('targets the stable versioned apps archive on GitHub', () => {
   assert.equal(
     catalog.contentsURL('archive/apps/v6.0.0'),
-    'https://api.github.com/repos/armel/uv-k1-k5v3-firmware-custom/contents/archive/apps/v6.0.0?ref=main',
+    'https://api.github.com/repos/N7SIX/UV-K1Series_ApeX-Edition_v7.6.0/contents/archive/apps/v6.0.0?ref=main',
   );
 });
 
@@ -231,7 +231,7 @@ test('keeps the current app catalog available when the GitHub API is unavailable
   assert.equal(apps[0].label, 'ACARS RX');
   assert.match(
     apps[0].url,
-    /raw\.githubusercontent\.com\/.*\/v6\.1\.0\/ACARSRX\.app$/,
+    /^https:\/\/raw\.githubusercontent\.com\/N7SIX\/UV-K1Series_ApeX-Edition_v7\.6\.0\/main\/archive\/apps\/v6\.1\.0\/ACARSRX\.app$/,
   );
   assert.deepEqual(
     catalog.fallbackApps({ version: '6.0.0', path: 'archive/apps/v6.0.0' }),
